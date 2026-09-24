@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bg_fundo">#0D0D0D</color>
+    <color name="bg_card">#1A1A1A</color>
+    <color name="bg_card_claro">#1E1E1E</color>
+    <color name="borda_card">#2A2A2A</color>
+
+    <color name="branco">#FFFFFF</color>
+    <color name="cinza_texto">#AAAAAA</color>
+    <color name="cinza_texto_escuro">#777777</color>
+    <color name="cinza_hint">#555555</color>
+
+    <color name="vermelho_accent">#E50914</color>
+    <color name="verde_ok">#4CAF50</color>
+    <color name="amarelo_alerta">#FFC107</color>
+    <color name="laranja_alerta">#FF9800</color>
+    <color name="vermelho_critico">#FF5252</color>
+    <color name="whatsapp_verde">#25D366</color>
+</resources>

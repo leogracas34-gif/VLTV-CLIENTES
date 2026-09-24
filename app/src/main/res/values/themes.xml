@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <style name="Theme.VltvClientes" parent="Theme.MaterialComponents.NoActionBar">
+        <item name="colorPrimary">@color/vermelho_accent</item>
+        <item name="colorPrimaryDark">@color/bg_fundo</item>
+        <item name="colorAccent">@color/vermelho_accent</item>
+        <item name="android:windowBackground">@color/bg_fundo</item>
+        <item name="android:statusBarColor">@color/bg_fundo</item>
+        <item name="android:navigationBarColor">@color/bg_fundo</item>
+        <item name="android:windowLightStatusBar" tools:targetApi="m">false</item>
+        <item name="android:textColorPrimary">@color/branco</item>
+        <item name="android:textColorSecondary">@color/cinza_texto</item>
+    </style>
+</resources>
