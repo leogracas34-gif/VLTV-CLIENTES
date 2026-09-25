@@ -3,12 +3,17 @@ package com.vltv.clientes.worker
 import android.content.Context
 import androidx.work.*
 import com.vltv.clientes.data.AppDatabase
+import com.vltv.clientes.data.ClienteDao
+import com.vltv.clientes.data.ClienteEntity
 import com.vltv.clientes.network.AppConfig
 import com.vltv.clientes.network.BackendApi
 import com.vltv.clientes.network.BuscaClienteResultado
 import com.vltv.clientes.network.XtreamCheck
 import com.vltv.clientes.notifications.NotificationHelper
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import java.util.Calendar
 import java.util.concurrent.TimeUnit
@@ -37,80 +42,93 @@ class VerificacaoVencimentoWorker(
         val dao = db.clienteDao()
         val clientes = dao.listarAtivos()
 
-        for (cliente in clientes) {
-            try {
-                val resultado = if (cliente.dns.isBlank()) {
-                    XtreamCheck.buscarCliente(applicationContext, cliente.usuario, cliente.senha)
-                } else {
-                    XtreamCheck.reconsultar(applicationContext, cliente.dns, cliente.usuario, cliente.senha)
-                }
-
-                when (resultado) {
-                    is BuscaClienteResultado.Sucesso -> {
-                        val r = resultado.resultado
-                        val atualizado = cliente.copy(
-                            dns = r.dns,
-                            expDateUnix = r.expDateUnix,
-                            diasRestantes = r.diasRestantes,
-                            ultimaChecagemEm = System.currentTimeMillis(),
-                            ultimoErro = null
-                        )
-                        dao.atualizar(atualizado)
-
-                        val dias = r.diasRestantes
-                        if (dias != null) {
-                            val precisaAvisar = (dias in 1..3 || dias < 0) &&
-                                atualizado.ultimoAvisoDias != dias &&
-                                estaNoHorarioDeAviso()
-                            if (precisaAvisar) {
-                                NotificationHelper.notificarVencimento(applicationContext, cliente.id, cliente.nome, dias)
-
-                                val mensagem = AppConfig.montarMensagemPara(applicationContext, dias, cliente.nome)
-                                if (mensagem != null) {
-                                    BackendApi.enviarMensagem(applicationContext, cliente.whatsapp, mensagem)
-                                }
-
-                                dao.atualizar(atualizado.copy(ultimoAvisoDias = dias))
-                            }
-                        }
-                    }
-                    is BuscaClienteResultado.CredenciaisInvalidas -> {
-                        dao.atualizar(cliente.copy(
-                            diasRestantes = cliente.diasRestantes ?: DIAS_SENTINELA_VENCIDO_SEM_DATA,
-                            ultimaChecagemEm = System.currentTimeMillis(),
-                            ultimoErro = "Usuário/senha não encontrados em nenhum servidor"
-                        ))
-                    }
-                    is BuscaClienteResultado.Erro -> {
-                        // Na prática, "não encontrado em NENHUM servidor" quase
-                        // sempre é conta desativada/vencida (o painel corta o
-                        // acesso à API inteira), não um problema de rede - o
-                        // mesmo comportamento que o VLTV Play já trata como
-                        // "Expirado" direto, sem mostrar diagnóstico técnico.
-                        // Se ainda não tínhamos NENHUMA data de vencimento
-                        // conhecida desse cliente, marca como Vencido (sem
-                        // data exata) em vez de deixar preso em "Erro". Se já
-                        // tínhamos uma data de antes, mantém ela como está.
-                        dao.atualizar(cliente.copy(
-                            diasRestantes = cliente.diasRestantes ?: DIAS_SENTINELA_VENCIDO_SEM_DATA,
-                            ultimaChecagemEm = System.currentTimeMillis(),
-                            ultimoErro = resultado.mensagem
-                        ))
-                    }
-                }
-            } catch (e: Exception) {
-                try {
-                    dao.atualizar(cliente.copy(
-                        ultimaChecagemEm = System.currentTimeMillis(),
-                        ultimoErro = "${e.javaClass.simpleName}: ${e.message ?: "erro desconhecido ao sincronizar"}"
-                    ))
-                } catch (e2: Exception) {
-                    // Se nem isso conseguir gravar, aí sim desiste desse cliente.
-                }
-            }
+        // ✅ ALTERADO: antes era um cliente de cada vez (for sequencial), então
+        // o tempo total virava a SOMA do tempo de todo mundo - com vários
+        // clientes, e principalmente os que demoram pra falhar (conta
+        // indisponível em todos os servidores), a sincronização inteira
+        // ficava lenta. Agora todos disparam ao mesmo tempo; o OkHttp já
+        // enfileira as chamadas de rede sozinho (não sobrecarrega o
+        // aparelho nem o servidor).
+        coroutineScope {
+            clientes.map { cliente ->
+                async { processarCliente(cliente, dao) }
+            }.awaitAll()
         }
 
         Result.success()
+    }
+
+    private suspend fun processarCliente(cliente: ClienteEntity, dao: ClienteDao) {
+        try {
+            val resultado = if (cliente.dns.isBlank()) {
+                XtreamCheck.buscarCliente(applicationContext, cliente.usuario, cliente.senha)
+            } else {
+                XtreamCheck.reconsultar(applicationContext, cliente.dns, cliente.usuario, cliente.senha)
+            }
+
+            when (resultado) {
+                is BuscaClienteResultado.Sucesso -> {
+                    val r = resultado.resultado
+                    val atualizado = cliente.copy(
+                        dns = r.dns,
+                        expDateUnix = r.expDateUnix,
+                        diasRestantes = r.diasRestantes,
+                        ultimaChecagemEm = System.currentTimeMillis(),
+                        ultimoErro = null
+                    )
+                    dao.atualizar(atualizado)
+
+                    val dias = r.diasRestantes
+                    if (dias != null) {
+                        val precisaAvisar = (dias in 1..3 || dias < 0) &&
+                            atualizado.ultimoAvisoDias != dias &&
+                            estaNoHorarioDeAviso()
+                        if (precisaAvisar) {
+                            NotificationHelper.notificarVencimento(applicationContext, cliente.id, cliente.nome, dias)
+
+                            val mensagem = AppConfig.montarMensagemPara(applicationContext, dias, cliente.nome)
+                            if (mensagem != null) {
+                                BackendApi.enviarMensagem(applicationContext, cliente.whatsapp, mensagem)
+                            }
+
+                            dao.atualizar(atualizado.copy(ultimoAvisoDias = dias))
+                        }
+                    }
+                }
+                is BuscaClienteResultado.CredenciaisInvalidas -> {
+                    dao.atualizar(cliente.copy(
+                        diasRestantes = cliente.diasRestantes ?: DIAS_SENTINELA_VENCIDO_SEM_DATA,
+                        ultimaChecagemEm = System.currentTimeMillis(),
+                        ultimoErro = "Usuário/senha não encontrados em nenhum servidor"
+                    ))
+                }
+                is BuscaClienteResultado.Erro -> {
+                    // Na prática, "não encontrado em NENHUM servidor" quase
+                    // sempre é conta desativada/vencida (o painel corta o
+                    // acesso à API inteira), não um problema de rede - o
+                    // mesmo comportamento que o VLTV Play já trata como
+                    // "Expirado" direto, sem mostrar diagnóstico técnico.
+                    // Se ainda não tínhamos NENHUMA data de vencimento
+                    // conhecida desse cliente, marca como Vencido (sem
+                    // data exata) em vez de deixar preso em "Erro". Se já
+                    // tínhamos uma data de antes, mantém ela como está.
+                    dao.atualizar(cliente.copy(
+                        diasRestantes = cliente.diasRestantes ?: DIAS_SENTINELA_VENCIDO_SEM_DATA,
+                        ultimaChecagemEm = System.currentTimeMillis(),
+                        ultimoErro = resultado.mensagem
+                    ))
+                }
+            }
+        } catch (e: Exception) {
+            try {
+                dao.atualizar(cliente.copy(
+                    ultimaChecagemEm = System.currentTimeMillis(),
+                    ultimoErro = "${e.javaClass.simpleName}: ${e.message ?: "erro desconhecido ao sincronizar"}"
+                ))
+            } catch (e2: Exception) {
+                // Se nem isso conseguir gravar, aí sim desiste desse cliente.
+            }
+        }
     }
 
     companion object {
