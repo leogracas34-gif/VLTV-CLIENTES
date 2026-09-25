@@ -21,6 +21,7 @@ class ConfiguracaoMensagensActivity : AppCompatActivity() {
         binding.etMsg2Dias.setText(AppConfig.getMensagem2Dias(this))
         binding.etMsg1Dia.setText(AppConfig.getMensagem1Dia(this))
         binding.etMsgVencido.setText(AppConfig.getMensagemVencido(this))
+        binding.etChavePix.setText(AppConfig.getChavePix(this))
 
         binding.btnConfigBackend.setOnClickListener {
             startActivity(Intent(this, ConfiguracaoBackendActivity::class.java))
@@ -34,6 +35,7 @@ class ConfiguracaoMensagensActivity : AppCompatActivity() {
                 binding.etMsg1Dia.text.toString(),
                 binding.etMsgVencido.text.toString()
             )
+            AppConfig.salvarChavePix(this, binding.etChavePix.text.toString())
             binding.btnSalvarMensagens.text = "Salvo ✓"
             binding.btnSalvarMensagens.postDelayed({
                 binding.btnSalvarMensagens.text = "Salvar"
