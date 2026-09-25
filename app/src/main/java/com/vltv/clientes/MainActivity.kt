@@ -44,7 +44,7 @@ class MainActivity : AppCompatActivity() {
         solicitarPermissaoNotificacaoSeNecessario()
 
         adapter = ClienteAdapter(
-            onClick = { cliente -> abrirEdicao(cliente) },
+            onClick = { cliente -> abrirDetalhe(cliente) },
             onMenuClick = { cliente, _ -> abrirEdicao(cliente) },
             onWhatsappClick = { cliente -> abrirWhatsapp(cliente) }
         )
@@ -96,6 +96,12 @@ class MainActivity : AppCompatActivity() {
     private fun abrirEdicao(cliente: ClienteEntity) {
         val intent = Intent(this, CadastroClienteActivity::class.java)
         intent.putExtra(CadastroClienteActivity.EXTRA_CLIENTE_ID, cliente.id)
+        startActivity(intent)
+    }
+
+    private fun abrirDetalhe(cliente: ClienteEntity) {
+        val intent = Intent(this, DetalheClienteActivity::class.java)
+        intent.putExtra(DetalheClienteActivity.EXTRA_CLIENTE_ID, cliente.id)
         startActivity(intent)
     }
 
