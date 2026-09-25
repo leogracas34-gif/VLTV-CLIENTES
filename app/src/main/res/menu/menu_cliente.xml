@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/itemObservacao"
+        android:title="Observação / Alerta" />
+    <item
+        android:id="@+id/itemEditar"
+        android:title="Editar Cliente" />
+    <item
+        android:id="@+id/itemExcluir"
+        android:title="Excluir Cliente" />
+</menu>
