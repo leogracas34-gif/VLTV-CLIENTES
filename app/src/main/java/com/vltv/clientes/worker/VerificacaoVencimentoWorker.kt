@@ -135,9 +135,9 @@ class VerificacaoVencimentoWorker(
         private const val WORK_NAME_PERIODICA = "verificacao_vencimento_diaria"
 
         // Horário-alvo apenas pra ANCORAR o início do ciclo de 1 em 1 hora -
-        // é essa execução, entre HORA_ALVO e HORA_ALVO+1 (09h-10h), que de
-        // fato manda a mensagem/notificação de vencimento - ver
-        // estaNoHorarioDeAviso().
+        // é essa execução, entre HORA_ALVO e HORA_ALVO+JANELA_AVISO_HORAS
+        // (09h-11h), que de fato manda a mensagem/notificação de vencimento -
+        // ver estaNoHorarioDeAviso().
         private const val HORA_ALVO = 9
         private const val MINUTO_ALVO = 30
 
@@ -147,7 +147,10 @@ class VerificacaoVencimentoWorker(
         // gated por estaNoHorarioDeAviso().
         private const val INTERVALO_HORAS = 1L
 
-        private const val JANELA_AVISO_HORAS = 1
+        // ✅ ALTERADO: 2h em vez de 1h - margem de segurança caso o
+        // WorkManager atrase a execução (Doze mode/otimização de bateria),
+        // pra não pular o aviso do dia por causa de um atraso do sistema.
+        private const val JANELA_AVISO_HORAS = 2
 
         private fun estaNoHorarioDeAviso(): Boolean {
             val hora = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
