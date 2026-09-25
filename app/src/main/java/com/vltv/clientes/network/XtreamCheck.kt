@@ -29,15 +29,21 @@ object XtreamCheck {
     private const val USER_AGENT =
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
 
+    // ✅ REDUZIDO: timeouts mais curtos - a maioria dos servidores que vai
+    // responder OK responde em poucos segundos; os que não respondem
+    // (DNS errado, painel fora do ar) não precisam de tanto tempo pra
+    // desistir. Isso corta bastante o tempo total de sincronização,
+    // principalmente pra clientes cuja conta está indisponível em todos os
+    // servidores (onde o app tem que esperar TODOS falharem).
     private val clientRapido = OkHttpClient.Builder()
-        .connectTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(15, TimeUnit.SECONDS)
+        .connectTimeout(5, TimeUnit.SECONDS)
+        .readTimeout(8, TimeUnit.SECONDS)
         .retryOnConnectionFailure(false)
         .build()
 
     private val clientLento = OkHttpClient.Builder()
-        .connectTimeout(25, TimeUnit.SECONDS)
-        .readTimeout(25, TimeUnit.SECONDS)
+        .connectTimeout(12, TimeUnit.SECONDS)
+        .readTimeout(12, TimeUnit.SECONDS)
         .retryOnConnectionFailure(true)
         .build()
 
@@ -177,9 +183,9 @@ object XtreamCheck {
             }
     }
 
-    // Testa todos os DNS conhecidos em paralelo (fase rápida, até 18s) e,
+    // Testa todos os DNS conhecidos em paralelo (fase rápida, até 10s) e,
     // se ninguém responder OK nesse tempo, tenta de novo TODOS em paralelo
-    // (fallback, até 25s) com timeout maior — e, se mesmo assim não achar,
+    // (fallback, até 15s) com timeout maior — e, se mesmo assim não achar,
     // retorna um resumo real do motivo de cada servidor ter falhado.
     suspend fun buscarCliente(context: Context, usuario: String, senha: String): BuscaClienteResultado =
         withContext(Dispatchers.IO) {
@@ -187,10 +193,10 @@ object XtreamCheck {
             val servidores = DnsConfig.servers(context)
             val diagnosticos = ConcurrentHashMap<String, String>()
 
-            var resultado = testarLoteEmParalelo(servidores, usuario, senha, clientRapido, 18_000L, diagnosticos)
+            var resultado = testarLoteEmParalelo(servidores, usuario, senha, clientRapido, 10_000L, diagnosticos)
 
             if (resultado == null) {
-                resultado = testarLoteEmParalelo(servidores, usuario, senha, clientLento, 25_000L, diagnosticos)
+                resultado = testarLoteEmParalelo(servidores, usuario, senha, clientLento, 15_000L, diagnosticos)
             }
 
             if (resultado != null) {
