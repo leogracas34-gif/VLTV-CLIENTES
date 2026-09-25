@@ -10,9 +10,10 @@ import com.vltv.clientes.network.XtreamCheck
 import com.vltv.clientes.notifications.NotificationHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.util.Calendar
 import java.util.concurrent.TimeUnit
 
-// Roda uma vez por dia (mais uma checagem extra sempre que o app é
+// Roda uma vez por dia, de manhã (mais uma checagem extra sempre que o app é
 // aberto - ver MainActivity, e sob demanda pelo botão "Sincronizar") e faz,
 // pra cada cliente ativo:
 //  1. Se o cliente ainda não tem DNS (pendente, acabou de ser salvo sem
@@ -105,20 +106,54 @@ class VerificacaoVencimentoWorker(
     companion object {
         private const val WORK_NAME_PERIODICA = "verificacao_vencimento_diaria"
 
+        // Horário-alvo do disparo diário (hora local do aparelho). Ajuste
+        // aqui se quiser outro horário - ex.: HORA_ALVO = 9 pra rodar 9h.
+        private const val HORA_ALVO = 8
+        private const val MINUTO_ALVO = 0
+
         // Nome único usado pela sincronização manual (botão "Sincronizar" e
         // pull-to-refresh da tela principal) - a MainActivity observa esse
         // nome pra mostrar o spinner e o aviso de "concluído".
         const val WORK_NAME_MANUAL = "verificacao_vencimento_manual"
+
+        // ✅ NOVO: calcula quanto tempo falta (em ms) até a próxima ocorrência
+        // do horário-alvo (hoje, se ainda não passou; amanhã, se já passou).
+        // É esse valor que vira o "atraso inicial" do trabalho periódico, pra
+        // garantir que a primeira execução (e, por consequência, todas as
+        // seguintes, já que são 24h em 24h a partir daí) caia sempre de manhã.
+        private fun calcularAtrasoAteProximoHorarioAlvo(): Long {
+            val agora = Calendar.getInstance()
+            val alvo = Calendar.getInstance().apply {
+                set(Calendar.HOUR_OF_DAY, HORA_ALVO)
+                set(Calendar.MINUTE, MINUTO_ALVO)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }
+            if (alvo.timeInMillis <= agora.timeInMillis) {
+                alvo.add(Calendar.DAY_OF_YEAR, 1)
+            }
+            return alvo.timeInMillis - agora.timeInMillis
+        }
 
         fun agendar(context: Context) {
             val constraints = Constraints.Builder()
                 .setRequiredNetworkType(NetworkType.CONNECTED)
                 .build()
 
+            val atrasoInicial = calcularAtrasoAteProximoHorarioAlvo()
+
             val request = PeriodicWorkRequestBuilder<VerificacaoVencimentoWorker>(
                 24, TimeUnit.HOURS
-            ).setConstraints(constraints).build()
+            )
+                .setConstraints(constraints)
+                .setInitialDelay(atrasoInicial, TimeUnit.MILLISECONDS)
+                .build()
 
+            // ExistingPeriodicWorkPolicy.KEEP: se já existir um agendamento
+            // (ex.: em versões anteriores do app, sem esse horário fixo),
+            // ele é mantido como está - não reagenda a cada abertura do app.
+            // Se quiser forçar a migração pro novo horário numa atualização,
+            // troque KEEP por UPDATE uma única vez e depois volte pra KEEP.
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(
                 WORK_NAME_PERIODICA,
                 ExistingPeriodicWorkPolicy.KEEP,
