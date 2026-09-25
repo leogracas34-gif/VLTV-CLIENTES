@@ -11,9 +11,12 @@
     <color name="cinza_hint">#555555</color>
 
     <color name="vermelho_accent">#E50914</color>
+    <color name="vermelho_accent_fraco">#33E50914</color>
     <color name="verde_ok">#4CAF50</color>
     <color name="amarelo_alerta">#FFC107</color>
+    <color name="amarelo_alerta_fraco">#33FFC107</color>
     <color name="laranja_alerta">#FF9800</color>
     <color name="vermelho_critico">#FF5252</color>
     <color name="whatsapp_verde">#25D366</color>
+    <color name="azul_pendente">#2196F3</color>
 </resources>

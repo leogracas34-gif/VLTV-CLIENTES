@@ -8,7 +8,11 @@ data class ClienteEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val nome: String,
     val whatsapp: String,       // só dígitos, com DDI+DDD, ex: 5531999998888
-    val dns: String,            // preenchido automaticamente após encontrar o servidor certo
+    // Preenchido automaticamente quando a sincronização em segundo plano
+    // encontra o servidor certo. Fica "" (vazio) entre o momento em que o
+    // cliente é salvo e o momento em que a primeira sincronização termina -
+    // é assim que o app sabe que esse cliente está "Pendente".
+    val dns: String = "",
     val usuario: String,
     val senha: String,
     val ativo: Boolean = true,

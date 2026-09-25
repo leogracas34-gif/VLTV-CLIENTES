@@ -13,9 +13,11 @@ import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
 
 // Roda uma vez por dia (mais uma checagem extra sempre que o app é
-// aberto - ver MainActivity) e faz, pra cada cliente ativo:
-//  1. Reconsulta o Xtream (usando o DNS já conhecido primeiro, com
-//     fallback pra lista inteira se aquele DNS específico não responder)
+// aberto - ver MainActivity, e sob demanda pelo botão "Sincronizar") e faz,
+// pra cada cliente ativo:
+//  1. Se o cliente ainda não tem DNS (pendente, acabou de ser salvo sem
+//     conexão), testa todos os servidores; senão reconsulta usando o DNS já
+//     conhecido primeiro, com fallback pra lista inteira se não responder.
 //  2. Atualiza o cache local (dias restantes etc.)
 //  3. Se bater 3/2/1 dia ou tiver acabado de vencer, e ainda não avisou
 //     hoje: dispara notificação nativa do Android + manda mensagem pro
@@ -32,9 +34,11 @@ class VerificacaoVencimentoWorker(
 
         for (cliente in clientes) {
             try {
-                val resultado = XtreamCheck.reconsultar(
-                    applicationContext, cliente.dns, cliente.usuario, cliente.senha
-                )
+                val resultado = if (cliente.dns.isBlank()) {
+                    XtreamCheck.buscarCliente(applicationContext, cliente.usuario, cliente.senha)
+                } else {
+                    XtreamCheck.reconsultar(applicationContext, cliente.dns, cliente.usuario, cliente.senha)
+                }
 
                 when (resultado) {
                     is BuscaClienteResultado.Sucesso -> {
@@ -85,7 +89,12 @@ class VerificacaoVencimentoWorker(
     }
 
     companion object {
-        private const val WORK_NAME = "verificacao_vencimento_diaria"
+        private const val WORK_NAME_PERIODICA = "verificacao_vencimento_diaria"
+
+        // Nome único usado pela sincronização manual (botão "Sincronizar" e
+        // pull-to-refresh da tela principal) - a MainActivity observa esse
+        // nome pra mostrar o spinner e o aviso de "concluído".
+        const val WORK_NAME_MANUAL = "verificacao_vencimento_manual"
 
         fun agendar(context: Context) {
             val constraints = Constraints.Builder()
@@ -97,7 +106,7 @@ class VerificacaoVencimentoWorker(
             ).setConstraints(constraints).build()
 
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(
-                WORK_NAME,
+                WORK_NAME_PERIODICA,
                 ExistingPeriodicWorkPolicy.KEEP,
                 request
             )
@@ -113,6 +122,24 @@ class VerificacaoVencimentoWorker(
                 .setConstraints(constraints)
                 .build()
             WorkManager.getInstance(context).enqueue(request)
+        }
+
+        // Sincronização manual disparada pelo botão "Sincronizar" (ou pelo
+        // pull-to-refresh) da tela principal - usa nome único com política
+        // KEEP pra não empilhar várias execuções se o usuário tocar o botão
+        // de novo enquanto uma sincronização anterior ainda está rodando.
+        fun executarManual(context: Context) {
+            val constraints = Constraints.Builder()
+                .setRequiredNetworkType(NetworkType.CONNECTED)
+                .build()
+            val request = OneTimeWorkRequestBuilder<VerificacaoVencimentoWorker>()
+                .setConstraints(constraints)
+                .build()
+            WorkManager.getInstance(context).enqueueUniqueWork(
+                WORK_NAME_MANUAL,
+                ExistingWorkPolicy.KEEP,
+                request
+            )
         }
     }
 }

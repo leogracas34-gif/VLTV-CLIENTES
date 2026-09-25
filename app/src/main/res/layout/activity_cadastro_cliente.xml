@@ -99,7 +99,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="O DNS é encontrado automaticamente entre os servidores cadastrados na VPS."
+            android:text="O DNS certo e o vencimento são encontrados automaticamente em segundo plano, mesmo sem internet agora — o cliente já fica salvo e sincroniza sozinho assim que possível."
             android:textColor="@color/cinza_texto_escuro"
             android:textSize="11.5sp"
             android:layout_marginBottom="14dp" />
@@ -144,41 +144,13 @@
             android:padding="14dp"
             android:layout_marginBottom="24dp" />
 
-        <LinearLayout
-            android:id="@+id/layoutStatusBusca"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:background="@drawable/bg_input"
-            android:padding="14dp"
-            android:layout_marginBottom="16dp"
-            android:visibility="gone">
-
-            <ProgressBar
-                android:id="@+id/progressBusca"
-                android:layout_width="20dp"
-                android:layout_height="20dp"
-                android:indeterminateTint="@color/vermelho_accent" />
-
-            <TextView
-                android:id="@+id/tvStatusBusca"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_marginStart="12dp"
-                android:text="Procurando servidor..."
-                android:textColor="@color/cinza_texto"
-                android:textSize="13sp" />
-        </LinearLayout>
-
         <TextView
             android:id="@+id/btnSalvar"
             android:layout_width="match_parent"
             android:layout_height="52dp"
             android:background="@drawable/bg_botao_primario"
             android:gravity="center"
-            android:text="Buscar e Salvar"
+            android:text="Salvar Cliente"
             android:textColor="@color/branco"
             android:textSize="15sp"
             android:textStyle="bold"

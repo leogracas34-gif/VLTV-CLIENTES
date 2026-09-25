@@ -1,6 +1,5 @@
 package com.vltv.clientes.ui
 
-import android.graphics.Color
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -14,15 +13,18 @@ import java.util.*
 
 class ClienteAdapter(
     private val onClick: (ClienteEntity) -> Unit,
-    private val onMenuClick: (ClienteEntity, View) -> Unit
+    private val onMenuClick: (ClienteEntity, View) -> Unit,
+    private val onWhatsappClick: (ClienteEntity) -> Unit
 ) : ListAdapter<ClienteEntity, ClienteAdapter.VH>(DIFF) {
 
     class VH(view: View) : RecyclerView.ViewHolder(view) {
+        val tvAvatar: android.widget.TextView = view.findViewById(R.id.tvAvatarInicial)
         val tvNome: android.widget.TextView = view.findViewById(R.id.tvNomeCliente)
         val tvWhatsapp: android.widget.TextView = view.findViewById(R.id.tvWhatsappCliente)
         val tvBadge: android.widget.TextView = view.findViewById(R.id.tvBadgeStatus)
         val tvUsuario: android.widget.TextView = view.findViewById(R.id.tvUsuarioCliente)
         val tvVencimento: android.widget.TextView = view.findViewById(R.id.tvVencimentoCliente)
+        val btnWhatsapp: android.widget.ImageButton = view.findViewById(R.id.btnWhatsappCliente)
         val btnMenu: android.widget.ImageButton = view.findViewById(R.id.btnMenuCliente)
     }
 
@@ -34,12 +36,20 @@ class ClienteAdapter(
     override fun onBindViewHolder(holder: VH, position: Int) {
         val cliente = getItem(position)
 
+        holder.tvAvatar.text = inicial(cliente.nome)
         holder.tvNome.text = cliente.nome
         holder.tvWhatsapp.text = formatarTelefone(cliente.whatsapp)
         holder.tvUsuario.text = "Login: ${cliente.usuario}"
 
         val dias = cliente.diasRestantes
         when {
+            cliente.dns.isBlank() -> {
+                // Acabou de ser salvo (offline ou VPS fora do ar) e ainda
+                // não conseguiu descobrir o servidor/vencimento.
+                holder.tvBadge.text = "Pendente"
+                holder.tvBadge.setBackgroundResource(R.drawable.bg_badge_azul)
+                holder.tvVencimento.text = "Aguardando sincronização"
+            }
             cliente.ultimoErro != null && dias == null -> {
                 holder.tvBadge.text = "Erro"
                 holder.tvBadge.setBackgroundResource(R.drawable.bg_badge_vermelho)
@@ -74,7 +84,11 @@ class ClienteAdapter(
 
         holder.itemView.setOnClickListener { onClick(cliente) }
         holder.btnMenu.setOnClickListener { onMenuClick(cliente, it) }
+        holder.btnWhatsapp.setOnClickListener { onWhatsappClick(cliente) }
     }
+
+    private fun inicial(nome: String): String =
+        nome.trim().firstOrNull()?.uppercaseChar()?.toString() ?: "?"
 
     private fun formatarTelefone(numero: String): String {
         // Formatação simples "+55 31 99999-8888" a partir de dígitos puros.

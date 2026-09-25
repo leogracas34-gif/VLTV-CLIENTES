@@ -1,13 +1,13 @@
 package com.vltv.clientes
 
 import android.os.Bundle
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.vltv.clientes.data.AppDatabase
 import com.vltv.clientes.data.ClienteEntity
 import com.vltv.clientes.databinding.ActivityCadastroClienteBinding
-import com.vltv.clientes.network.BuscaClienteResultado
-import com.vltv.clientes.network.XtreamCheck
+import com.vltv.clientes.worker.SincronizacaoClienteWorker
 import kotlinx.coroutines.launch
 
 class CadastroClienteActivity : AppCompatActivity() {
@@ -31,7 +31,7 @@ class CadastroClienteActivity : AppCompatActivity() {
             carregarCliente(clienteId)
         }
 
-        binding.btnSalvar.setOnClickListener { validarEBuscar() }
+        binding.btnSalvar.setOnClickListener { validarESalvar() }
         binding.btnExcluir.setOnClickListener { confirmarExclusao() }
     }
 
@@ -46,7 +46,12 @@ class CadastroClienteActivity : AppCompatActivity() {
         }
     }
 
-    private fun validarEBuscar() {
+    // Salva o cliente IMEDIATAMENTE no banco local, sem depender de internet
+    // ou da VPS estar no ar. A busca do DNS/vencimento acontece depois, em
+    // segundo plano (SincronizacaoClienteWorker) - se não conseguir agora,
+    // o WorkManager tenta de novo sozinho assim que a rede voltar, e o botão
+    // "Sincronizar" da tela principal também pega esse cliente pendente.
+    private fun validarESalvar() {
         val nome = binding.etNome.text.toString().trim()
         val whatsappBruto = binding.etWhatsapp.text.toString().trim()
         val usuario = binding.etUsuario.text.toString().trim()
@@ -58,56 +63,51 @@ class CadastroClienteActivity : AppCompatActivity() {
         if (senha.isEmpty()) { binding.etSenha.error = "Informe a senha"; return }
 
         val whatsapp = normalizarWhatsapp(whatsappBruto)
+        val existente = clienteExistente
+        val credenciaisMudaram = existente?.let { it.usuario != usuario || it.senha != senha } ?: true
 
-        mostrarBusca(true, "Procurando servidor entre os cadastrados na VPS...")
+        binding.btnSalvar.isEnabled = false
 
         lifecycleScope.launch {
-            val resultado = XtreamCheck.buscarCliente(this@CadastroClienteActivity, usuario, senha)
+            val idSalvo: Long
 
-            when (resultado) {
-                is BuscaClienteResultado.Sucesso -> {
-                    val r = resultado.resultado
-                    salvarCliente(nome, whatsapp, r.dns, usuario, senha, r.expDateUnix, r.diasRestantes)
-                }
-                is BuscaClienteResultado.CredenciaisInvalidas -> {
-                    mostrarErroBusca("Não encontramos esse usuário/senha em nenhum servidor cadastrado. Confira os dados e tente de novo.")
-                }
-                is BuscaClienteResultado.Erro -> {
-                    mostrarErroBusca(resultado.mensagem)
-                }
-            }
-        }
-    }
-
-    private fun salvarCliente(
-        nome: String, whatsapp: String, dns: String, usuario: String, senha: String,
-        expDateUnix: Long?, diasRestantes: Int?
-    ) {
-        lifecycleScope.launch {
-            val existente = clienteExistente
             if (existente != null) {
-                database.clienteDao().atualizar(
-                    existente.copy(
-                        nome = nome, whatsapp = whatsapp, dns = dns, usuario = usuario, senha = senha,
-                        expDateUnix = expDateUnix, diasRestantes = diasRestantes,
-                        ultimaChecagemEm = System.currentTimeMillis(), ultimoErro = null
-                    )
+                val atualizado = existente.copy(
+                    nome = nome,
+                    whatsapp = whatsapp,
+                    usuario = usuario,
+                    senha = senha,
+                    // Se o login/senha mudou, esquece o status antigo - vai
+                    // reconsultar do zero. Se não mudou, mantém o DNS/dias
+                    // já conhecidos até a próxima sincronização confirmar.
+                    dns = if (credenciaisMudaram) "" else existente.dns,
+                    diasRestantes = if (credenciaisMudaram) null else existente.diasRestantes,
+                    expDateUnix = if (credenciaisMudaram) null else existente.expDateUnix,
+                    ultimoErro = null
                 )
+                database.clienteDao().atualizar(atualizado)
+                idSalvo = atualizado.id
             } else {
-                database.clienteDao().inserir(
+                idSalvo = database.clienteDao().inserir(
                     ClienteEntity(
-                        nome = nome, whatsapp = whatsapp, dns = dns, usuario = usuario, senha = senha,
-                        expDateUnix = expDateUnix, diasRestantes = diasRestantes,
-                        ultimaChecagemEm = System.currentTimeMillis()
+                        nome = nome, whatsapp = whatsapp, usuario = usuario, senha = senha
                     )
                 )
             }
+
+            SincronizacaoClienteWorker.sincronizar(this@CadastroClienteActivity, idSalvo)
+
+            Toast.makeText(
+                this@CadastroClienteActivity,
+                "Cliente salvo. Sincronizando em segundo plano...",
+                Toast.LENGTH_SHORT
+            ).show()
             finish()
         }
     }
 
     private fun confirmarExclusao() {
-        // Confirmação simples e discreta, dentro da própria tela — sem
+        // Confirmação simples e discreta, dentro da própria tela - sem
         // dialog nativo: troca o texto do botão pra "Toque de novo pra
         // confirmar" por alguns segundos.
         if (binding.btnExcluir.text == "Toque novamente para confirmar") {
@@ -126,21 +126,6 @@ class CadastroClienteActivity : AppCompatActivity() {
             database.clienteDao().excluir(cliente)
             finish()
         }
-    }
-
-    private fun mostrarBusca(mostrar: Boolean, texto: String) {
-        binding.layoutStatusBusca.visibility = if (mostrar) android.view.View.VISIBLE else android.view.View.GONE
-        binding.progressBusca.visibility = if (mostrar) android.view.View.VISIBLE else android.view.View.GONE
-        binding.tvStatusBusca.text = texto
-        binding.btnSalvar.isEnabled = !mostrar
-        binding.btnSalvar.alpha = if (mostrar) 0.6f else 1f
-    }
-
-    private fun mostrarErroBusca(mensagem: String) {
-        mostrarBusca(true, mensagem)
-        binding.progressBusca.visibility = android.view.View.GONE
-        binding.btnSalvar.isEnabled = true
-        binding.btnSalvar.alpha = 1f
     }
 
     // Aceita número já com ou sem DDI - se vier só com DDD+número (10-11
