@@ -234,7 +234,11 @@ class MainActivity : AppCompatActivity() {
             Filtro.TODOS -> listaCompleta
             Filtro.VENCENDO -> listaCompleta.filter { (it.diasRestantes ?: 99) in 0..3 }
             Filtro.VENCIDOS -> listaCompleta.filter { (it.diasRestantes ?: 0) < 0 }
-            Filtro.PENDENTES -> listaCompleta.filter { it.dns.isBlank() }
+            // ✅ CORRIGIDO: "Pendente" agora só conta cliente que nunca teve
+            // vencimento descoberto (diasRestantes null) - se já sabemos os
+            // dias (mesmo com dns zerado por uma resincronização que falhou),
+            // ele aparece em "Vencendo"/"Vencidos" normalmente, não aqui.
+            Filtro.PENDENTES -> listaCompleta.filter { it.dns.isBlank() && it.diasRestantes == null }
         }
         adapter.submitList(filtrada)
         binding.layoutVazio.visibility = if (listaCompleta.isEmpty()) android.view.View.VISIBLE else android.view.View.GONE
@@ -244,7 +248,7 @@ class MainActivity : AppCompatActivity() {
     private fun atualizarResumo(lista: List<ClienteEntity>) {
         val vencendo = lista.count { (it.diasRestantes ?: 99) in 0..3 }
         val vencidos = lista.count { (it.diasRestantes ?: 0) < 0 }
-        val pendentes = lista.count { it.dns.isBlank() }
+        val pendentes = lista.count { it.dns.isBlank() && it.diasRestantes == null }
 
         binding.tvStatTotal.text = lista.size.toString()
         binding.tvStatAVencer.text = vencendo.toString()
