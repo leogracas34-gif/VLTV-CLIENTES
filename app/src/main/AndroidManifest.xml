@@ -31,6 +31,11 @@
             android:theme="@style/Theme.VltvClientes" />
 
         <activity
+            android:name=".DetalheClienteActivity"
+            android:exported="false"
+            android:theme="@style/Theme.VltvClientes" />
+
+        <activity
             android:name=".ConfiguracaoMensagensActivity"
             android:exported="false"
             android:theme="@style/Theme.VltvClientes" />
