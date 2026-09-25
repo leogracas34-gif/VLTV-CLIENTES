@@ -82,17 +82,47 @@ object XtreamCheck {
                     return null to "não é um painel Xtream válido (resposta sem user_info)"
                 }
 
-                val authZero = Regex("\"auth\"\\s*:\\s*\"?0\"?").containsMatchIn(body)
-                if (authZero) {
-                    return null to "usuário/senha não encontrados neste servidor"
-                }
-
                 val expDateMatch = Regex("\"exp_date\"\\s*:\\s*\"?(\\d+)\"?").find(body)
                 val expDateUnix = expDateMatch?.groupValues?.get(1)?.toLongOrNull()
 
+                // ✅ CORREÇÃO PRINCIPAL (causa real do bug "cliente vencido
+                // fica preso em Pendente/Erro"): "auth":0 NÃO significa
+                // sempre "usuário/senha errados". Vários painéis Xtream
+                // (os mesmos usados pelo VLTV Play) devolvem auth:0 também
+                // para contas JÁ VENCIDAS/desativadas — e nesse caso o
+                // exp_date continua vindo certinho na resposta. É exatamente
+                // assim que o VLTV Play (XtreamApi.kt/PlanoUtils) descobre
+                // que uma conta está "Expirada": ele nem olha o campo auth,
+                // só o exp_date.
+                //
+                // Antes, QUALQUER auth:0 fazia este servidor ser descartado
+                // como "usuário/senha não encontrados". Como TODOS os
+                // servidores da lista devolvem auth:0 pra essa mesma conta
+                // vencida, a busca inteira falhava (resultado = null) e o
+                // cliente ficava marcado como "Erro"/"Pendente" pra sempre —
+                // mesmo a própria resposta do painel já dizendo, no
+                // exp_date, que ele está vencido.
+                //
+                // Agora só é tratado como credencial realmente inválida
+                // quando auth é 0 E não veio NENHUM exp_date junto (aí sim é
+                // sinal de usuário/senha que o painel não reconhece de
+                // verdade, e não uma conta vencida).
+                val authZero = Regex("\"auth\"\\s*:\\s*\"?0\"?").containsMatchIn(body)
+                if (authZero && expDateUnix == null) {
+                    return null to "usuário/senha não encontrados neste servidor"
+                }
+
+                // ✅ CORRIGIDO: cálculo de dias restantes agora usa floorDiv
+                // (igual ao PlanoUtils do VLTV Play), não mais Math.ceil.
+                // Math.ceil arredonda em direção ao 0 pra diferenças
+                // negativas pequenas — uma conta vencida há só algumas horas
+                // (ex.: -0,2 dias) virava "0 dias restantes" em vez de "-1",
+                // então não entrava em "Vencidos" no mesmo dia em que venceu.
+                // floorDiv arredonda sempre pra baixo, então qualquer
+                // instante já vencido vira negativo de verdade.
                 val diasRestantes = if (expDateUnix != null) {
                     val diffMs = (expDateUnix * 1000L) - System.currentTimeMillis()
-                    Math.ceil(diffMs / (1000.0 * 60 * 60 * 24)).toInt()
+                    diffMs.floorDiv(TimeUnit.DAYS.toMillis(1)).toInt()
                 } else null
 
                 ResultadoBusca(dns = urlBase, expDateUnix = expDateUnix, diasRestantes = diasRestantes) to "ok"
