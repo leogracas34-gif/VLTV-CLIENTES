@@ -2,13 +2,16 @@ package com.vltv.clientes.network
 
 import android.content.Context
 
-// Guarda as configurações do app: endereço do backend de WhatsApp e os
-// templates de mensagem editáveis pelo usuário na tela de Configurações.
+// Guarda as configurações do app: endereço do backend de WhatsApp, chave
+// Pix do negócio e os templates de mensagem editáveis pelo usuário na tela
+// de Configurações.
 object AppConfig {
     private const val PREFS_NAME = "vltv_clientes_config"
 
     private const val KEY_BACKEND_URL = "backend_url"
     private const val KEY_API_KEY = "backend_api_key"
+
+    private const val KEY_PIX_CHAVE = "pix_chave"
 
     private const val KEY_MSG_3_DIAS = "msg_3_dias"
     private const val KEY_MSG_2_DIAS = "msg_2_dias"
@@ -36,6 +39,15 @@ object AppConfig {
             .putString(KEY_BACKEND_URL, limpa)
             .putString(KEY_API_KEY, apiKey.trim())
             .apply()
+    }
+
+    // Chave Pix do negócio (ex: um e-mail dedicado) - usada futuramente nas
+    // mensagens automáticas pra facilitar o pagamento do cliente.
+    fun getChavePix(context: Context): String =
+        prefs(context).getString(KEY_PIX_CHAVE, "") ?: ""
+
+    fun salvarChavePix(context: Context, chave: String) {
+        prefs(context).edit().putString(KEY_PIX_CHAVE, chave.trim()).apply()
     }
 
     fun getMensagem3Dias(context: Context) = prefs(context).getString(KEY_MSG_3_DIAS, PADRAO_MSG_3_DIAS) ?: PADRAO_MSG_3_DIAS
