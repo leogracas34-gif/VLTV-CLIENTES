@@ -5,6 +5,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
 data class ResultadoBusca(
@@ -19,10 +20,10 @@ sealed class BuscaClienteResultado {
     data class Erro(val mensagem: String) : BuscaClienteResultado()
 }
 
-// Mesma lógica de "testar todos os DNS em paralelo, depois em série com
-// timeout maior" já usada no LoginActivity.kt do VLTV+ — reaproveitada
-// aqui pra achar automaticamente em qual servidor um usuário/senha está
-// ativo, sem o operador precisar saber de antemão qual é o DNS certo.
+// Mesma lógica de "testar todos os DNS em paralelo, o que responder OK
+// primeiro ganha" do LoginActivity.kt do VLTV+, mas guardando o MOTIVO de
+// cada servidor que falhar — pra saber de verdade se é credencial errada,
+// timeout, erro de DNS, painel fora do ar, etc., em vez de só "não achei".
 object XtreamCheck {
 
     private const val USER_AGENT =
@@ -48,17 +49,19 @@ object XtreamCheck {
         return url
     }
 
-    // Retorna: ResultadoBusca se achou e está ATIVO; null se esse servidor
-    // específico não respondeu ou a conta não existe nele.
-    // "credenciaisExpiradas" é setado (via referência externa) quando a
-    // conta EXISTE nesse servidor mas está vencida — pra diferenciar de
-    // "usuário/senha errados" no resultado final.
+    // Extrai só o domínio (sem http://) pra usar como chave no mapa de
+    // diagnóstico, ex.: "fibercdn.sbs".
+    private fun dominioDe(url: String): String =
+        url.removePrefix("http://").removePrefix("https://").removeSuffix("/")
+
+    // Retorna o resultado (se achou e está ativo) OU o motivo exato da
+    // falha nesse servidor específico — nunca os dois nulos ao mesmo tempo.
     private fun testarServidor(
         baseUrl: String,
         user: String,
         pass: String,
         httpClient: OkHttpClient
-    ): ResultadoBusca? {
+    ): Pair<ResultadoBusca?, String> {
         val urlBase = normalizarBaseUrl(baseUrl)
         val urlSemBarra = urlBase.removeSuffix("/")
         return try {
@@ -69,18 +72,21 @@ object XtreamCheck {
                 .build()
 
             httpClient.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return null
-                val body = response.body?.string() ?: return null
+                if (!response.isSuccessful) {
+                    return null to "HTTP ${response.code}"
+                }
+                val body = response.body?.string() ?: return null to "resposta vazia"
 
                 val temUserInfo = body.contains("user_info") && body.contains("server_info")
-                if (!temUserInfo) return null
+                if (!temUserInfo) {
+                    return null to "não é um painel Xtream válido (resposta sem user_info)"
+                }
 
                 val authZero = Regex("\"auth\"\\s*:\\s*\"?0\"?").containsMatchIn(body)
-                if (authZero) return null // usuário/senha não batem NESTE servidor
+                if (authZero) {
+                    return null to "usuário/senha não encontrados neste servidor"
+                }
 
-                // Conta existe e autenticou — pega o exp_date, mesmo se
-                // estiver Expired/Disabled (queremos mostrar o vencimento
-                // de qualquer forma, só marcando como vencido).
                 val expDateMatch = Regex("\"exp_date\"\\s*:\\s*\"?(\\d+)\"?").find(body)
                 val expDateUnix = expDateMatch?.groupValues?.get(1)?.toLongOrNull()
 
@@ -89,50 +95,78 @@ object XtreamCheck {
                     Math.ceil(diffMs / (1000.0 * 60 * 60 * 24)).toInt()
                 } else null
 
-                ResultadoBusca(dns = urlBase, expDateUnix = expDateUnix, diasRestantes = diasRestantes)
+                ResultadoBusca(dns = urlBase, expDateUnix = expDateUnix, diasRestantes = diasRestantes) to "ok"
             }
         } catch (e: Exception) {
-            null
+            null to "${e.javaClass.simpleName}: ${e.message ?: "sem detalhes"}"
         }
     }
 
-    // Testa todos os DNS conhecidos (fase rápida em paralelo, depois fase
-    // lenta em série como fallback) até achar onde esse usuário/senha
-    // funciona. Suspende até terminar - chamar de uma coroutine em
-    // Dispatchers.IO.
+    // Testa um lote de servidores em paralelo, registrando o motivo de cada
+    // um que falhar no mapa "diagnosticos" (compartilhado entre as fases).
+    private suspend fun testarLoteEmParalelo(
+        servidores: List<String>,
+        usuario: String,
+        senha: String,
+        httpClient: OkHttpClient,
+        timeoutMs: Long,
+        diagnosticos: ConcurrentHashMap<String, String>
+    ): ResultadoBusca? = coroutineScope {
+        var resultado: ResultadoBusca? = null
+        try {
+            val canal = Channel<ResultadoBusca>(Channel.UNLIMITED)
+            val jobs = servidores.map { url ->
+                launch(Dispatchers.IO) {
+                    val (r, motivo) = testarServidor(url, usuario, senha, httpClient)
+                    if (r != null) canal.trySend(r) else diagnosticos[dominioDe(url)] = motivo
+                }
+            }
+            resultado = withTimeoutOrNull(timeoutMs) { canal.receive() }
+            jobs.forEach { it.cancel() }
+            canal.close()
+        } catch (e: Exception) {
+            // segue com resultado null
+        }
+        resultado
+    }
+
+    // Monta um resumo legível a partir do mapa de diagnóstico: agrupa por
+    // tipo de motivo e mostra quantos servidores caíram em cada um, além de
+    // 1 exemplo de domínio por grupo — assim dá pra ver de cara se é
+    // credencial errada (a maioria diz "usuário/senha não encontrados") ou
+    // se é rede/DNS (a maioria diz timeout/erro de conexão).
+    private fun resumirDiagnosticos(diagnosticos: Map<String, String>): String {
+        if (diagnosticos.isEmpty()) return "Nenhum servidor respondeu (sem diagnóstico)."
+
+        val porMotivo = diagnosticos.entries.groupBy { it.value }
+        return porMotivo.entries
+            .sortedByDescending { it.value.size }
+            .joinToString("; ") { (motivo, entradas) ->
+                val exemplo = entradas.first().key
+                "$motivo (${entradas.size}/${diagnosticos.size}, ex.: $exemplo)"
+            }
+    }
+
+    // Testa todos os DNS conhecidos em paralelo (fase rápida, até 18s) e,
+    // se ninguém responder OK nesse tempo, tenta de novo TODOS em paralelo
+    // (fallback, até 25s) com timeout maior — e, se mesmo assim não achar,
+    // retorna um resumo real do motivo de cada servidor ter falhado.
     suspend fun buscarCliente(context: Context, usuario: String, senha: String): BuscaClienteResultado =
         withContext(Dispatchers.IO) {
             DnsConfig.refresh(context)
             val servidores = DnsConfig.servers(context)
+            val diagnosticos = ConcurrentHashMap<String, String>()
 
-            var resultado: ResultadoBusca? = null
-
-            try {
-                val canal = Channel<ResultadoBusca>(Channel.UNLIMITED)
-                val jobs = servidores.map { url ->
-                    launch(Dispatchers.IO) {
-                        val r = testarServidor(url, usuario, senha, clientRapido)
-                        if (r != null) canal.trySend(r)
-                    }
-                }
-                resultado = withTimeoutOrNull(18_000L) { canal.receive() }
-                jobs.forEach { it.cancel() }
-                canal.close()
-            } catch (e: Exception) {
-                // segue pro fallback
-            }
+            var resultado = testarLoteEmParalelo(servidores, usuario, senha, clientRapido, 18_000L, diagnosticos)
 
             if (resultado == null) {
-                for (servidor in servidores) {
-                    val r = testarServidor(servidor, usuario, senha, clientLento)
-                    if (r != null) { resultado = r; break }
-                }
+                resultado = testarLoteEmParalelo(servidores, usuario, senha, clientLento, 25_000L, diagnosticos)
             }
 
             if (resultado != null) {
                 BuscaClienteResultado.Sucesso(resultado)
             } else {
-                BuscaClienteResultado.CredenciaisInvalidas
+                BuscaClienteResultado.Erro(resumirDiagnosticos(diagnosticos))
             }
         }
 
@@ -141,7 +175,7 @@ object XtreamCheck {
     // ser mais rápido nas checagens diárias de rotina).
     suspend fun reconsultar(context: Context, dnsConhecido: String, usuario: String, senha: String): BuscaClienteResultado =
         withContext(Dispatchers.IO) {
-            val direto = testarServidor(dnsConhecido, usuario, senha, clientRapido)
+            val (direto, _) = testarServidor(dnsConhecido, usuario, senha, clientRapido)
             if (direto != null) return@withContext BuscaClienteResultado.Sucesso(direto)
 
             // DNS antigo não respondeu mais (pode ter saído do ar) — busca
