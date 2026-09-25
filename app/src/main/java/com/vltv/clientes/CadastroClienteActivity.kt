@@ -134,12 +134,20 @@ class CadastroClienteActivity : AppCompatActivity() {
                     plano = planoSelecionado.name,
                     valorPlano = valorPlano,
                     observacao = observacao,
-                    // Se o login/senha mudou, esquece o status antigo - vai
-                    // reconsultar do zero. Se não mudou, mantém o DNS/dias
-                    // já conhecidos até a próxima sincronização confirmar.
+                    // ✅ CORRIGIDO: antes, quando o login/senha mudava, o app
+                    // também apagava diasRestantes/expDateUnix (deixava tudo
+                    // null) - então, se a nova tentativa de sincronização
+                    // falhasse (ex: cliente já vencido e removido do painel,
+                    // credenciais antigas que não respondem mais), o cliente
+                    // ficava preso em "Pendente" pra sempre, escondendo que
+                    // ele já estava "Vencido". Agora só o "dns" é zerado
+                    // (força reconsultar todos os servidores do zero); o
+                    // último vencimento conhecido fica guardado e continua
+                    // aparecendo na tela até uma sincronização nova e bem
+                    // sucedida confirmar (ou corrigir) o status.
                     dns = if (credenciaisMudaram) "" else existente.dns,
-                    diasRestantes = if (credenciaisMudaram) null else existente.diasRestantes,
-                    expDateUnix = if (credenciaisMudaram) null else existente.expDateUnix,
+                    diasRestantes = existente.diasRestantes,
+                    expDateUnix = existente.expDateUnix,
                     ultimoErro = null
                 )
                 database.clienteDao().atualizar(atualizado)
