@@ -13,16 +13,20 @@ import kotlinx.coroutines.withContext
 import java.util.Calendar
 import java.util.concurrent.TimeUnit
 
-// Roda uma vez por dia, de manhã (mais uma checagem extra sempre que o app é
-// aberto - ver MainActivity, e sob demanda pelo botão "Sincronizar") e faz,
-// pra cada cliente ativo:
+// Roda a cada 5 horas (mais uma checagem extra sempre que o app é aberto -
+// ver MainActivity, e sob demanda pelo botão "Sincronizar") e faz, pra cada
+// cliente ativo:
 //  1. Se o cliente ainda não tem DNS (pendente, acabou de ser salvo sem
 //     conexão), testa todos os servidores; senão reconsulta usando o DNS já
 //     conhecido primeiro, com fallback pra lista inteira se não responder.
-//  2. Atualiza o cache local (dias restantes etc.)
-//  3. Se bater 3/2/1 dia ou tiver acabado de vencer, e ainda não avisou
-//     hoje: dispara notificação nativa do Android + manda mensagem pro
-//     cliente via backend (fila do WhatsApp)
+//  2. Atualiza o cache local (dias restantes etc.) - isso roda em toda
+//     execução (a cada 5h), pra refletir rápido qualquer alteração de
+//     vencimento/login feita manualmente.
+//  3. Se bater 3/2/1 dia ou tiver acabado de vencer, ainda não avisou hoje
+//     E o horário atual está na janela das 9h-10h: dispara notificação
+//     nativa do Android + manda mensagem pro cliente via backend (fila do
+//     WhatsApp). O aviso em si continua sendo só 1x por dia, mesmo rodando
+//     a checagem várias vezes.
 class VerificacaoVencimentoWorker(
     context: Context,
     params: WorkerParameters
@@ -55,7 +59,20 @@ class VerificacaoVencimentoWorker(
 
                         val dias = r.diasRestantes
                         if (dias != null) {
-                            val precisaAvisar = (dias in 1..3 || dias < 0) && atualizado.ultimoAvisoDias != dias
+                            // ✅ NOVO: a checagem em si roda a cada 5h (mais
+                            // assertiva pra pegar alteração de vencimento ou
+                            // login), mas a mensagem/notificação de aviso só
+                            // deve sair 1x por dia, no horário-alvo (9h-10h,
+                            // pra cair perto das 9h30). "ultimoAvisoDias"
+                            // continua evitando reenvio se já avisou hoje
+                            // (dias não muda entre as execuções do mesmo
+                            // dia), e "estaNoHorarioDeAviso" evita que o
+                            // aviso saia às 14h30/19h30/00h30 caso a janela
+                            // das 9h ainda não tenha disparado por algum
+                            // motivo (rede fora do ar etc.).
+                            val precisaAvisar = (dias in 1..3 || dias < 0) &&
+                                atualizado.ultimoAvisoDias != dias &&
+                                estaNoHorarioDeAviso()
                             if (precisaAvisar) {
                                 NotificationHelper.notificarVencimento(applicationContext, cliente.id, cliente.nome, dias)
 
@@ -106,10 +123,33 @@ class VerificacaoVencimentoWorker(
     companion object {
         private const val WORK_NAME_PERIODICA = "verificacao_vencimento_diaria"
 
-        // Horário-alvo do disparo diário (hora local do aparelho). Ajuste
-        // aqui se quiser outro horário - ex.: HORA_ALVO = 9 pra rodar 9h.
-        private const val HORA_ALVO = 8
-        private const val MINUTO_ALVO = 0
+        // Horário-alvo apenas pra ANCORAR o início do ciclo de 5 em 5 horas
+        // (ver INTERVALO_HORAS) - não é mais "1x por dia", é só o horário em
+        // que uma das execuções do dia vai cair. É essa execução, entre
+        // HORA_ALVO e HORA_ALVO+1 (09h-10h), que de fato manda a
+        // mensagem/notificação de vencimento - ver estaNoHorarioDeAviso().
+        private const val HORA_ALVO = 9
+        private const val MINUTO_ALVO = 30
+
+        // ✅ NOVO: checagem em segundo plano a cada 5h (antes era 24h) - mais
+        // assertivo pra detectar rápido uma alteração de vencimento/login
+        // feita manualmente. O envio de mensagem ao cliente continua sendo
+        // só 1x por dia, gated por estaNoHorarioDeAviso().
+        private const val INTERVALO_HORAS = 5L
+
+        // Janela de tempo (em horas, a partir de HORA_ALVO) em que uma
+        // execução tem permissão de disparar notificação/mensagem de
+        // vencimento pro cliente.
+        private const val JANELA_AVISO_HORAS = 1
+
+        // Só dispara a mensagem/notificação de vencimento se o relógio do
+        // aparelho estiver dentro da janela alvo (09h-10h, pra cair perto
+        // das 09h30) - evita mandar a mesma mensagem de novo em outro
+        // horário do dia (14h30, 19h30, 00h30...) por causa do ciclo de 5h.
+        private fun estaNoHorarioDeAviso(): Boolean {
+            val hora = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+            return hora in HORA_ALVO until (HORA_ALVO + JANELA_AVISO_HORAS)
+        }
 
         // Nome único usado pela sincronização manual (botão "Sincronizar" e
         // pull-to-refresh da tela principal) - a MainActivity observa esse
@@ -143,26 +183,27 @@ class VerificacaoVencimentoWorker(
             val atrasoInicial = calcularAtrasoAteProximoHorarioAlvo()
 
             val request = PeriodicWorkRequestBuilder<VerificacaoVencimentoWorker>(
-                24, TimeUnit.HOURS
+                INTERVALO_HORAS, TimeUnit.HOURS
             )
                 .setConstraints(constraints)
                 .setInitialDelay(atrasoInicial, TimeUnit.MILLISECONDS)
                 .build()
 
-            // ExistingPeriodicWorkPolicy.KEEP: se já existir um agendamento
-            // (ex.: em versões anteriores do app, sem esse horário fixo),
-            // ele é mantido como está - não reagenda a cada abertura do app.
-            // Se quiser forçar a migração pro novo horário numa atualização,
-            // troque KEEP por UPDATE uma única vez e depois volte pra KEEP.
+            // ✅ ExistingPeriodicWorkPolicy.UPDATE (era KEEP): quem já tinha
+            // o agendamento antigo de 24h precisa migrar pro novo ciclo de
+            // 5h agora - UPDATE reagenda com os novos parâmetros preservando
+            // o nome único. Depois que essa atualização já estiver instalada
+            // em todo mundo, pode voltar pra KEEP (senão toda abertura do
+            // app reagenda o ciclo do zero, adiando a próxima execução).
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(
                 WORK_NAME_PERIODICA,
-                ExistingPeriodicWorkPolicy.KEEP,
+                ExistingPeriodicWorkPolicy.UPDATE,
                 request
             )
         }
 
         // Dispara uma checagem imediata (ex: assim que o app abre), sem
-        // esperar o ciclo de 24h - roda em paralelo ao trabalho agendado.
+        // esperar o próximo ciclo de 5h - roda em paralelo ao trabalho agendado.
         fun executarAgora(context: Context) {
             val constraints = Constraints.Builder()
                 .setRequiredNetworkType(NetworkType.CONNECTED)
