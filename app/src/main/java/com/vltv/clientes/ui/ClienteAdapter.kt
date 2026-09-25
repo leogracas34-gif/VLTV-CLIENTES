@@ -90,16 +90,43 @@ class ClienteAdapter(
     private fun inicial(nome: String): String =
         nome.trim().firstOrNull()?.uppercaseChar()?.toString() ?: "?"
 
+    // ✅ CORRIGIDO: a versão anterior assumia sempre 8 dígitos de número local
+    // (d.length - 10 pro DDI), mas celular brasileiro tem 9 dígitos locais
+    // (com o "9" na frente) - um número de 13 dígitos totais (55+DDD+9
+    // dígitos) ficava com o DDI "553" e o DDD "19" em vez de "55"/"31".
+    // Agora trata explicitamente os tamanhos possíveis de número brasileiro
+    // (com ou sem o "55" na frente, com ou sem o 9º dígito).
     private fun formatarTelefone(numero: String): String {
-        // Formatação simples "+55 31 99999-8888" a partir de dígitos puros.
         val d = numero.filter { it.isDigit() }
-        return if (d.length >= 12) {
-            val ddi = d.substring(0, d.length - 10)
-            val ddd = d.substring(d.length - 10, d.length - 8)
-            val parte1 = d.substring(d.length - 8, d.length - 4)
-            val parte2 = d.substring(d.length - 4)
-            "+$ddi $ddd $parte1-$parte2"
-        } else numero
+        return when (d.length) {
+            13 -> { // 55 + DDD(2) + 9 dígitos locais (celular padrão atual)
+                val ddi = d.substring(0, 2)
+                val ddd = d.substring(2, 4)
+                val parte1 = d.substring(4, 9)
+                val parte2 = d.substring(9)
+                "+$ddi $ddd $parte1-$parte2"
+            }
+            12 -> { // 55 + DDD(2) + 8 dígitos locais (fixo, ou celular sem o 9)
+                val ddi = d.substring(0, 2)
+                val ddd = d.substring(2, 4)
+                val parte1 = d.substring(4, 8)
+                val parte2 = d.substring(8)
+                "+$ddi $ddd $parte1-$parte2"
+            }
+            11 -> { // sem DDI: DDD(2) + 9 dígitos locais
+                val ddd = d.substring(0, 2)
+                val parte1 = d.substring(2, 7)
+                val parte2 = d.substring(7)
+                "$ddd $parte1-$parte2"
+            }
+            10 -> { // sem DDI: DDD(2) + 8 dígitos locais
+                val ddd = d.substring(0, 2)
+                val parte1 = d.substring(2, 6)
+                val parte2 = d.substring(6)
+                "$ddd $parte1-$parte2"
+            }
+            else -> numero
+        }
     }
 
     private fun formatarDataVencimento(expUnix: Long?): String {
