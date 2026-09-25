@@ -76,12 +76,23 @@ class VerificacaoVencimentoWorker(
                     }
                     is BuscaClienteResultado.CredenciaisInvalidas -> {
                         dao.atualizar(cliente.copy(
+                            diasRestantes = cliente.diasRestantes ?: DIAS_SENTINELA_VENCIDO_SEM_DATA,
                             ultimaChecagemEm = System.currentTimeMillis(),
                             ultimoErro = "Usuário/senha não encontrados em nenhum servidor"
                         ))
                     }
                     is BuscaClienteResultado.Erro -> {
+                        // Na prática, "não encontrado em NENHUM servidor" quase
+                        // sempre é conta desativada/vencida (o painel corta o
+                        // acesso à API inteira), não um problema de rede - o
+                        // mesmo comportamento que o VLTV Play já trata como
+                        // "Expirado" direto, sem mostrar diagnóstico técnico.
+                        // Se ainda não tínhamos NENHUMA data de vencimento
+                        // conhecida desse cliente, marca como Vencido (sem
+                        // data exata) em vez de deixar preso em "Erro". Se já
+                        // tínhamos uma data de antes, mantém ela como está.
                         dao.atualizar(cliente.copy(
+                            diasRestantes = cliente.diasRestantes ?: DIAS_SENTINELA_VENCIDO_SEM_DATA,
                             ultimaChecagemEm = System.currentTimeMillis(),
                             ultimoErro = resultado.mensagem
                         ))
@@ -126,6 +137,13 @@ class VerificacaoVencimentoWorker(
         }
 
         const val WORK_NAME_MANUAL = "verificacao_vencimento_manual"
+
+        // Valor usado em diasRestantes quando sabemos que a conta está
+        // vencida/indisponível mas NUNCA descobrimos a data exata (conta já
+        // chegou desativada, sem nenhum histórico de exp_date válido). -1
+        // já entra na faixa "Vencido" em toda a lógica existente (badge,
+        // filtro da aba Vencidos), sem precisar de um campo novo no banco.
+        private const val DIAS_SENTINELA_VENCIDO_SEM_DATA = -1
 
         private fun calcularAtrasoAteProximoHorarioAlvo(): Long {
             val agora = Calendar.getInstance()
