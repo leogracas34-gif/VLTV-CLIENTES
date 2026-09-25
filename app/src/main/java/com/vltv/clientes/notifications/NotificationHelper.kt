@@ -14,6 +14,11 @@ object NotificationHelper {
     private const val CHANNEL_ID = "vencimentos_clientes"
     private const val CHANNEL_NAME = "Vencimentos de Clientes"
 
+    // ✅ NOVO: canal separado só pra diagnóstico temporário de sincronização
+    // — assim não se mistura com as notificações normais de vencimento.
+    private const val CHANNEL_ID_DIAGNOSTICO = "diagnostico_sincronizacao"
+    private const val CHANNEL_NAME_DIAGNOSTICO = "Diagnóstico de Sincronização"
+
     fun garantirCanal(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -24,6 +29,14 @@ object NotificationHelper {
                     description = "Avisos de clientes próximos do vencimento ou já vencidos"
                 }
                 manager.createNotificationChannel(canal)
+            }
+            if (manager.getNotificationChannel(CHANNEL_ID_DIAGNOSTICO) == null) {
+                val canalDiag = NotificationChannel(
+                    CHANNEL_ID_DIAGNOSTICO, CHANNEL_NAME_DIAGNOSTICO, NotificationManager.IMPORTANCE_HIGH
+                ).apply {
+                    description = "Mostra o resultado exato de cada tentativa de sincronização — temporário, pra debug"
+                }
+                manager.createNotificationChannel(canalDiag)
             }
         }
     }
@@ -65,6 +78,30 @@ object NotificationHelper {
             NotificationManagerCompat.from(context).notify(clienteId.toInt(), notificacao)
         } catch (e: SecurityException) {
             // Permissão POST_NOTIFICATIONS não concedida (Android 13+) - segue sem notificar.
+        }
+    }
+
+    // ✅ NOVO — TEMPORÁRIO PRA DEBUG: dispara uma notificação com o
+    // resultado EXATO de uma tentativa de sincronização (sucesso, motivo da
+    // falha, ou a exceção real). Usa setStyle(BigTextStyle) pra caber texto
+    // longo (o resumo de diagnóstico pode ser grande). ID bem distante dos
+    // IDs de vencimento (que usam clienteId.toInt()) pra nunca colidir.
+    fun notificarDiagnostico(context: Context, nomeCliente: String, mensagem: String) {
+        garantirCanal(context)
+
+        val notificacao = NotificationCompat.Builder(context, CHANNEL_ID_DIAGNOSTICO)
+            .setSmallIcon(R.drawable.ic_sync)
+            .setContentTitle("Sincronização: $nomeCliente")
+            .setContentText(mensagem)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(mensagem))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .build()
+
+        try {
+            NotificationManagerCompat.from(context).notify(900_000 + nomeCliente.hashCode(), notificacao)
+        } catch (e: SecurityException) {
+            // Permissão POST_NOTIFICATIONS não concedida - segue sem notificar.
         }
     }
 }
