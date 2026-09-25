@@ -18,10 +18,10 @@ object AppConfig {
     private const val KEY_MSG_1_DIA = "msg_1_dia"
     private const val KEY_MSG_VENCIDO = "msg_vencido"
 
-    const val PADRAO_MSG_3_DIAS = "Olá, {nome}! 👋 Seu plano vence em 3 dias. Renove com antecedência pra não perder o acesso!"
-    const val PADRAO_MSG_2_DIAS = "Olá, {nome}! Faltam apenas 2 dias para o vencimento do seu plano. Já pensou em renovar?"
-    const val PADRAO_MSG_1_DIA = "Olá, {nome}! ⚠️ Seu plano vence amanhã! Renove agora mesmo pra continuar sem interrupção."
-    const val PADRAO_MSG_VENCIDO = "Olá, {nome}. Seu plano venceu. Entre em contato para renovar e voltar a ter acesso."
+    const val PADRAO_MSG_3_DIAS = "Olá, {nome}! 👋\n\nSeu plano vence em 3 dias. Para não perder o acesso, renove com antecedência.\n\n💳 Chave Pix para pagamento: {pix}\n\nQualquer dúvida, estou à disposição!"
+    const val PADRAO_MSG_2_DIAS = "Olá, {nome}!\n\nFaltam apenas 2 dias para o vencimento do seu plano. Já pensou em renovar?\n\n💳 Chave Pix para pagamento: {pix}"
+    const val PADRAO_MSG_1_DIA = "Olá, {nome}! ⚠️\n\nSeu plano vence amanhã! Renove agora mesmo para continuar sem interrupção.\n\n💳 Chave Pix para pagamento: {pix}"
+    const val PADRAO_MSG_VENCIDO = "Olá, {nome}.\n\nSeu plano venceu. Para voltar a ter acesso, é só renovar.\n\n💳 Chave Pix para pagamento: {pix}\n\nQualquer dúvida, estou à disposição!"
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -41,8 +41,8 @@ object AppConfig {
             .apply()
     }
 
-    // Chave Pix do negócio (ex: um e-mail dedicado) - usada futuramente nas
-    // mensagens automáticas pra facilitar o pagamento do cliente.
+    // Chave Pix do negócio (ex: um e-mail dedicado) - entra automaticamente
+    // nas mensagens automáticas de vencimento, no lugar de {pix}.
     fun getChavePix(context: Context): String =
         prefs(context).getString(KEY_PIX_CHAVE, "") ?: ""
 
@@ -65,7 +65,7 @@ object AppConfig {
     }
 
     // Monta a mensagem certa pro número de dias restantes, substituindo
-    // {nome} e {dias} pelos valores reais. Retorna null se não houver
+    // {nome}, {dias} e {pix} pelos valores reais. Retorna null se não houver
     // mensagem configurada para esse valor de dias (não deve avisar).
     fun montarMensagemPara(context: Context, diasRestantes: Int, nome: String): String? {
         val template = when (diasRestantes) {
@@ -75,8 +75,22 @@ object AppConfig {
             else -> if (diasRestantes < 0) getMensagemVencido(context) else null
         } ?: return null
 
-        return template
+        val comNomeEDias = template
             .replace("{nome}", nome)
             .replace("{dias}", diasRestantes.toString())
+
+        return aplicarChavePix(context, comNomeEDias)
+    }
+
+    // Substitui {pix} pela chave configurada. Se não houver chave Pix
+    // cadastrada ainda, remove a linha inteira do template em vez de mandar
+    // "Chave Pix para pagamento: " vazio pro cliente.
+    private fun aplicarChavePix(context: Context, texto: String): String {
+        val chave = getChavePix(context)
+        return if (chave.isBlank()) {
+            texto.lines().filterNot { it.contains("{pix}") }.joinToString("\n")
+        } else {
+            texto.replace("{pix}", chave)
+        }
     }
 }
