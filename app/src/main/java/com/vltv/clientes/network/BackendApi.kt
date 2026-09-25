@@ -1,6 +1,8 @@
 package com.vltv.clientes.network
 
 import android.content.Context
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -32,50 +34,54 @@ object BackendApi {
             return EnvioResultado.Falha("Servidor de envio não configurado. Vá em Configurações → Servidor de Envio.")
         }
 
-        return try {
-            val json = JSONObject().apply {
-                put("telefone", telefone)
-                put("mensagem", mensagem)
-            }
-            val body = json.toString().toRequestBody("application/json".toMediaType())
-
-            val request = Request.Builder()
-                .url("$baseUrl/enviar")
-                .header("x-api-key", apiKey)
-                .post(body)
-                .build()
-
-            client.newCall(request).execute().use { response ->
-                if (response.isSuccessful) {
-                    EnvioResultado.Ok
-                } else {
-                    EnvioResultado.Falha("Servidor respondeu ${response.code}")
+        return withContext(Dispatchers.IO) {
+            try {
+                val json = JSONObject().apply {
+                    put("telefone", telefone)
+                    put("mensagem", mensagem)
                 }
+                val body = json.toString().toRequestBody("application/json".toMediaType())
+
+                val request = Request.Builder()
+                    .url("$baseUrl/enviar")
+                    .header("x-api-key", apiKey)
+                    .post(body)
+                    .build()
+
+                client.newCall(request).execute().use { response ->
+                    if (response.isSuccessful) {
+                        EnvioResultado.Ok
+                    } else {
+                        EnvioResultado.Falha("Servidor respondeu ${response.code}")
+                    }
+                }
+            } catch (e: Exception) {
+                EnvioResultado.Falha("${e.javaClass.simpleName}: ${e.message}")
             }
-        } catch (e: Exception) {
-            EnvioResultado.Falha("${e.javaClass.simpleName}: ${e.message}")
         }
     }
 
     // Chama GET /saude - usado no botão "Testar Conexão" da tela de config.
     suspend fun testarConexao(baseUrl: String): EnvioResultado {
-        return try {
-            var url = baseUrl.trim()
-            if (url.endsWith("/")) url = url.dropLast(1)
+        return withContext(Dispatchers.IO) {
+            try {
+                var url = baseUrl.trim()
+                if (url.endsWith("/")) url = url.dropLast(1)
 
-            val request = Request.Builder().url("$url/saude").get().build()
-            client.newCall(request).execute().use { response ->
-                if (response.isSuccessful) {
-                    val body = response.body?.string().orEmpty()
-                    val conectado = JSONObject(body).optBoolean("whatsappConectado", false)
-                    if (conectado) EnvioResultado.Ok
-                    else EnvioResultado.Falha("Servidor no ar, mas o WhatsApp ainda não está conectado (escaneie o QR no Telegram).")
-                } else {
-                    EnvioResultado.Falha("Servidor respondeu ${response.code}")
+                val request = Request.Builder().url("$url/saude").get().build()
+                client.newCall(request).execute().use { response ->
+                    if (response.isSuccessful) {
+                        val body = response.body?.string().orEmpty()
+                        val conectado = JSONObject(body).optBoolean("whatsappConectado", false)
+                        if (conectado) EnvioResultado.Ok
+                        else EnvioResultado.Falha("Servidor no ar, mas o WhatsApp ainda não está conectado (escaneie o QR no Telegram).")
+                    } else {
+                        EnvioResultado.Falha("Servidor respondeu ${response.code}")
+                    }
                 }
+            } catch (e: Exception) {
+                EnvioResultado.Falha("${e.javaClass.simpleName}: ${e.message}")
             }
-        } catch (e: Exception) {
-            EnvioResultado.Falha("${e.javaClass.simpleName}: ${e.message}")
         }
     }
 }
