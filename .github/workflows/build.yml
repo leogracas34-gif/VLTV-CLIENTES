@@ -33,8 +33,12 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: gradle assembleRelease
 
+      - name: Listar APKs gerados (debug)
+        run: find app/build/outputs/apk -type f -name "*.apk"
+
       - name: Publicar APK gerado
         uses: actions/upload-artifact@v4
         with:
           name: vltv-clientes-release
-          path: app/build/outputs/apk/release/app-release.apk
+          path: app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
