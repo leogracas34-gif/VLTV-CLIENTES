@@ -1,20 +1,25 @@
 package com.vltv.clientes
 
 import android.os.Bundle
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.vltv.clientes.data.AppDatabase
 import com.vltv.clientes.data.ClienteEntity
+import com.vltv.clientes.data.PlanoCliente
 import com.vltv.clientes.databinding.ActivityCadastroClienteBinding
 import com.vltv.clientes.worker.SincronizacaoClienteWorker
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 class CadastroClienteActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityCadastroClienteBinding
     private val database by lazy { AppDatabase.getDatabase(this) }
     private var clienteExistente: ClienteEntity? = null
+    private var planoSelecionado: PlanoCliente = PlanoCliente.MENSAL
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -22,6 +27,12 @@ class CadastroClienteActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         binding.btnVoltar.setOnClickListener { finish() }
+
+        binding.chipMensal.setOnClickListener { selecionarPlano(PlanoCliente.MENSAL, preencherValorPadrao = true) }
+        binding.chipTrimestral.setOnClickListener { selecionarPlano(PlanoCliente.TRIMESTRAL, preencherValorPadrao = true) }
+        binding.chipSemestral.setOnClickListener { selecionarPlano(PlanoCliente.SEMESTRAL, preencherValorPadrao = true) }
+        binding.chipAnual.setOnClickListener { selecionarPlano(PlanoCliente.ANUAL, preencherValorPadrao = true) }
+        selecionarPlano(PlanoCliente.MENSAL, preencherValorPadrao = true)
 
         val clienteId = intent.getLongExtra(EXTRA_CLIENTE_ID, -1L)
         if (clienteId != -1L) {
@@ -35,6 +46,36 @@ class CadastroClienteActivity : AppCompatActivity() {
         binding.btnExcluir.setOnClickListener { confirmarExclusao() }
     }
 
+    // Só atualiza o visual dos chips (+ preenche o valor com o padrão do
+    // plano, quando vier de um toque do usuário). Ao carregar um cliente já
+    // existente, chamamos sem preencherValorPadrao pra não sobrescrever um
+    // valor combinado manualmente com o cliente.
+    private fun selecionarPlano(plano: PlanoCliente, preencherValorPadrao: Boolean) {
+        planoSelecionado = plano
+
+        val chips = listOf(
+            binding.chipMensal to PlanoCliente.MENSAL,
+            binding.chipTrimestral to PlanoCliente.TRIMESTRAL,
+            binding.chipSemestral to PlanoCliente.SEMESTRAL,
+            binding.chipAnual to PlanoCliente.ANUAL
+        )
+        for ((chip, valor) in chips) {
+            aplicarEstiloChip(chip, selecionado = valor == plano)
+        }
+
+        if (preencherValorPadrao) {
+            binding.etValorPlano.setText(formatarValor(plano.valorPadrao))
+        }
+    }
+
+    private fun aplicarEstiloChip(chip: TextView, selecionado: Boolean) {
+        chip.setBackgroundResource(if (selecionado) R.drawable.bg_chip_selecionado else R.drawable.bg_chip_normal)
+        chip.setTextColor(ContextCompat.getColor(this, if (selecionado) R.color.branco else R.color.cinza_texto))
+    }
+
+    private fun formatarValor(valor: Double): String =
+        String.format(Locale.US, "%.2f", valor)
+
     private fun carregarCliente(id: Long) {
         lifecycleScope.launch {
             val cliente = database.clienteDao().buscarPorId(id) ?: return@launch
@@ -43,6 +84,15 @@ class CadastroClienteActivity : AppCompatActivity() {
             binding.etWhatsapp.setText(cliente.whatsapp)
             binding.etUsuario.setText(cliente.usuario)
             binding.etSenha.setText(cliente.senha)
+            binding.etObservacao.setText(cliente.observacao ?: "")
+
+            val plano = try {
+                PlanoCliente.valueOf(cliente.plano)
+            } catch (e: IllegalArgumentException) {
+                PlanoCliente.MENSAL
+            }
+            selecionarPlano(plano, preencherValorPadrao = false)
+            binding.etValorPlano.setText(formatarValor(cliente.valorPlano))
         }
     }
 
@@ -56,6 +106,10 @@ class CadastroClienteActivity : AppCompatActivity() {
         val whatsappBruto = binding.etWhatsapp.text.toString().trim()
         val usuario = binding.etUsuario.text.toString().trim()
         val senha = binding.etSenha.text.toString().trim()
+        val observacao = binding.etObservacao.text.toString().trim().ifBlank { null }
+        val valorPlano = binding.etValorPlano.text.toString().trim()
+            .replace(",", ".")
+            .toDoubleOrNull() ?: planoSelecionado.valorPadrao
 
         if (nome.isEmpty()) { binding.etNome.error = "Informe o nome"; return }
         if (whatsappBruto.isEmpty()) { binding.etWhatsapp.error = "Informe o WhatsApp"; return }
@@ -77,6 +131,9 @@ class CadastroClienteActivity : AppCompatActivity() {
                     whatsapp = whatsapp,
                     usuario = usuario,
                     senha = senha,
+                    plano = planoSelecionado.name,
+                    valorPlano = valorPlano,
+                    observacao = observacao,
                     // Se o login/senha mudou, esquece o status antigo - vai
                     // reconsultar do zero. Se não mudou, mantém o DNS/dias
                     // já conhecidos até a próxima sincronização confirmar.
@@ -90,7 +147,13 @@ class CadastroClienteActivity : AppCompatActivity() {
             } else {
                 idSalvo = database.clienteDao().inserir(
                     ClienteEntity(
-                        nome = nome, whatsapp = whatsapp, usuario = usuario, senha = senha
+                        nome = nome,
+                        whatsapp = whatsapp,
+                        usuario = usuario,
+                        senha = senha,
+                        plano = planoSelecionado.name,
+                        valorPlano = valorPlano,
+                        observacao = observacao
                     )
                 )
             }
