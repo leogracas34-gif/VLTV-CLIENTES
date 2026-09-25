@@ -75,7 +75,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Use {nome} e {dias} — serão substituídos automaticamente ao enviar."
+            android:text="Use {nome}, {dias} e {pix} — serão substituídos automaticamente ao enviar. Se a Chave Pix acima estiver vazia, a linha do {pix} é removida sozinha da mensagem."
             android:textColor="@color/cinza_texto_escuro"
             android:textSize="12sp"
             android:layout_marginBottom="20dp" />
