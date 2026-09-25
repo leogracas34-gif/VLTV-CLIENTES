@@ -81,7 +81,21 @@ class VerificacaoVencimentoWorker(
                     }
                 }
             } catch (e: Exception) {
-                // Erro num cliente não deve travar a checagem dos outros.
+                // ✅ CORREÇÃO: antes esse catch era vazio — qualquer exceção
+                // fora do tratamento normal (ex.: dentro do XtreamCheck)
+                // fazia o worker terminar "com sucesso" sem NUNCA gravar
+                // nada nesse cliente. dns continuava "" e ultimoErro
+                // continuava null pra sempre, e o card ficava preso em
+                // "Pendente" mesmo depois de "Sincronização concluída".
+                // Agora o motivo real fica registrado e aparece na tela.
+                try {
+                    dao.atualizar(cliente.copy(
+                        ultimaChecagemEm = System.currentTimeMillis(),
+                        ultimoErro = "${e.javaClass.simpleName}: ${e.message ?: "erro desconhecido ao sincronizar"}"
+                    ))
+                } catch (e2: Exception) {
+                    // Se nem isso conseguir gravar, aí sim desiste desse cliente.
+                }
             }
         }
 
