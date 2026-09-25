@@ -62,14 +62,19 @@ class SincronizacaoClienteWorker(
                 is BuscaClienteResultado.CredenciaisInvalidas -> {
                     dao.atualizar(
                         cliente.copy(
+                            diasRestantes = cliente.diasRestantes ?: DIAS_SENTINELA_VENCIDO_SEM_DATA,
                             ultimaChecagemEm = System.currentTimeMillis(),
                             ultimoErro = "Usuário/senha não encontrados em nenhum servidor"
                         )
                     )
                 }
                 is BuscaClienteResultado.Erro -> {
+                    // Não encontrado em nenhum servidor quase sempre é conta
+                    // desativada/vencida (não erro de rede) - trata como
+                    // Vencido sem data exata, igual ao VerificacaoVencimentoWorker.
                     dao.atualizar(
                         cliente.copy(
+                            diasRestantes = cliente.diasRestantes ?: DIAS_SENTINELA_VENCIDO_SEM_DATA,
                             ultimaChecagemEm = System.currentTimeMillis(),
                             ultimoErro = resultado.mensagem
                         )
@@ -87,6 +92,11 @@ class SincronizacaoClienteWorker(
 
     companion object {
         private const val KEY_CLIENTE_ID = "cliente_id"
+
+        // Mesmo valor-sentinela usado no VerificacaoVencimentoWorker: marca
+        // "Vencido, mas sem data exata conhecida" sem precisar de campo novo
+        // no banco.
+        private const val DIAS_SENTINELA_VENCIDO_SEM_DATA = -1
 
         fun sincronizar(context: Context, clienteId: Long) {
             val constraints = Constraints.Builder()
