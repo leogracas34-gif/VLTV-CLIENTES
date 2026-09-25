@@ -53,7 +53,7 @@ object BackendApi {
                 }
             }
         } catch (e: Exception) {
-            EnvioResultado.Falha(e.message ?: "Erro de conexão com o servidor")
+            EnvioResultado.Falha("${e.javaClass.simpleName}: ${e.message}")
         }
     }
 
@@ -75,7 +75,7 @@ object BackendApi {
                 }
             }
         } catch (e: Exception) {
-            EnvioResultado.Falha(e.message ?: "Não foi possível conectar")
+            EnvioResultado.Falha("${e.javaClass.simpleName}: ${e.message}")
         }
     }
 }
