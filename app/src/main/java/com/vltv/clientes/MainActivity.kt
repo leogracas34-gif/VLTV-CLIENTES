@@ -6,10 +6,14 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.widget.EditText
+import android.widget.PopupMenu
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
@@ -19,6 +23,7 @@ import com.vltv.clientes.databinding.ActivityMainBinding
 import com.vltv.clientes.network.AppConfig
 import com.vltv.clientes.ui.ClienteAdapter
 import com.vltv.clientes.worker.VerificacaoVencimentoWorker
+import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
 
@@ -45,7 +50,7 @@ class MainActivity : AppCompatActivity() {
 
         adapter = ClienteAdapter(
             onClick = { cliente -> abrirDetalhe(cliente) },
-            onMenuClick = { cliente, _ -> abrirEdicao(cliente) },
+            onMenuClick = { cliente, view -> mostrarMenuCliente(cliente, view) },
             onWhatsappClick = { cliente -> abrirWhatsapp(cliente) }
         )
         binding.rvClientes.layoutManager = LinearLayoutManager(this)
@@ -103,6 +108,62 @@ class MainActivity : AppCompatActivity() {
         val intent = Intent(this, DetalheClienteActivity::class.java)
         intent.putExtra(DetalheClienteActivity.EXTRA_CLIENTE_ID, cliente.id)
         startActivity(intent)
+    }
+
+    // Menu que abre ao tocar na engrenagem do card: opção rápida de
+    // observação/alerta (sem precisar entrar na tela de edição inteira),
+    // além de Editar e Excluir.
+    private fun mostrarMenuCliente(cliente: ClienteEntity, anchor: android.view.View) {
+        val popup = PopupMenu(this, anchor)
+        popup.menuInflater.inflate(R.menu.menu_cliente, popup.menu)
+        popup.setOnMenuItemClickListener { item ->
+            when (item.itemId) {
+                R.id.itemObservacao -> { abrirObservacao(cliente); true }
+                R.id.itemEditar -> { abrirEdicao(cliente); true }
+                R.id.itemExcluir -> { confirmarExclusao(cliente); true }
+                else -> false
+            }
+        }
+        popup.show()
+    }
+
+    // Caixa rápida pra ver/editar só a observação (ou um alerta) do cliente,
+    // sem passar pela tela de edição completa.
+    private fun abrirObservacao(cliente: ClienteEntity) {
+        val input = EditText(this).apply {
+            setText(cliente.observacao ?: "")
+            hint = "Ex: prefere pagar via Pix no início do mês"
+            setTextColor(ContextCompat.getColor(context, R.color.branco))
+            setHintTextColor(ContextCompat.getColor(context, R.color.cinza_hint))
+            setPadding(48, 32, 48, 32)
+            minLines = 3
+            gravity = android.view.Gravity.TOP
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("Observação — ${cliente.nome}")
+            .setView(input)
+            .setPositiveButton("Salvar") { _, _ ->
+                val texto = input.text.toString().trim().ifBlank { null }
+                lifecycleScope.launch {
+                    database.clienteDao().atualizar(cliente.copy(observacao = texto))
+                }
+            }
+            .setNegativeButton("Cancelar", null)
+            .show()
+    }
+
+    private fun confirmarExclusao(cliente: ClienteEntity) {
+        AlertDialog.Builder(this)
+            .setTitle("Excluir cliente")
+            .setMessage("Tem certeza que deseja excluir ${cliente.nome}? Essa ação não pode ser desfeita.")
+            .setPositiveButton("Excluir") { _, _ ->
+                lifecycleScope.launch {
+                    database.clienteDao().excluir(cliente)
+                }
+            }
+            .setNegativeButton("Cancelar", null)
+            .show()
     }
 
     // Abre o WhatsApp já com uma mensagem sugerida (usa o mesmo template
