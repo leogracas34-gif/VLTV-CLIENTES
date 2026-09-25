@@ -78,7 +78,12 @@ class DetalheClienteActivity : AppCompatActivity() {
     private fun descreverStatus(cliente: ClienteEntity): String {
         val dias = cliente.diasRestantes
         return when {
-            dias != null && dias < 0 -> "Venceu em ${formatarData(cliente.expDateUnix)} (há ${-dias} dias)"
+            dias != null && dias < 0 -> {
+                if (cliente.expDateUnix != null)
+                    "Venceu em ${formatarData(cliente.expDateUnix)} (há ${-dias} dias)"
+                else
+                    "Vencido — conta indisponível em todos os servidores testados (data exata desconhecida)"
+            }
             dias != null && dias == 0 -> "Vence hoje (${formatarData(cliente.expDateUnix)})"
             dias != null -> "Vence em ${formatarData(cliente.expDateUnix)} ($dias dias restantes)"
             cliente.dns.isBlank() && cliente.ultimoErro == null -> "Aguardando sincronização"
