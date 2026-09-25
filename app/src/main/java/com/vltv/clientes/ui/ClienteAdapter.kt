@@ -43,42 +43,53 @@ class ClienteAdapter(
 
         val dias = cliente.diasRestantes
         when {
-            cliente.dns.isBlank() -> {
-                // Acabou de ser salvo (offline ou VPS fora do ar) e ainda
-                // não conseguiu descobrir o servidor/vencimento.
-                holder.tvBadge.text = "Pendente"
-                holder.tvBadge.setBackgroundResource(R.drawable.bg_badge_azul)
-                holder.tvVencimento.text = "Aguardando sincronização"
-            }
-            cliente.ultimoErro != null && dias == null -> {
-                holder.tvBadge.text = "Erro"
-                holder.tvBadge.setBackgroundResource(R.drawable.bg_badge_vermelho)
-                holder.tvVencimento.text = cliente.ultimoErro
-            }
-            dias == null -> {
-                holder.tvBadge.text = "..."
-                holder.tvBadge.setBackgroundResource(R.drawable.bg_badge_amarelo)
-                holder.tvVencimento.text = "Aguardando primeira checagem"
-            }
-            dias < 0 -> {
+            // ✅ CORRIGIDO: antes, "dns em branco" era checado ANTES de "dias
+            // restantes conhecidos", então um cliente que já tinha um
+            // vencimento sabido (ex: expirou e a conta some do servidor,
+            // fazendo a resincronização falhar e zerar o dns de novo) ficava
+            // preso em "Pendente" pra sempre, escondendo que ele já estava
+            // "Vencido". Agora, se já sabemos os dias restantes (mesmo que
+            // a sincronização mais recente tenha falhado), o status por data
+            // manda - "Pendente"/"Erro" só aparecem quando NUNCA descobrimos
+            // o vencimento desse cliente.
+            dias != null && dias < 0 -> {
                 holder.tvBadge.text = "Vencido"
                 holder.tvBadge.setBackgroundResource(R.drawable.bg_badge_vermelho)
                 holder.tvVencimento.text = formatarDataVencimento(cliente.expDateUnix)
             }
-            dias <= 3 -> {
+            dias != null && dias <= 3 -> {
                 holder.tvBadge.text = if (dias == 1) "1 dia" else "$dias dias"
                 holder.tvBadge.setBackgroundResource(R.drawable.bg_badge_laranja)
                 holder.tvVencimento.text = formatarDataVencimento(cliente.expDateUnix)
             }
-            dias <= 10 -> {
+            dias != null && dias <= 10 -> {
                 holder.tvBadge.text = "$dias dias"
                 holder.tvBadge.setBackgroundResource(R.drawable.bg_badge_amarelo)
                 holder.tvVencimento.text = formatarDataVencimento(cliente.expDateUnix)
             }
-            else -> {
+            dias != null -> {
                 holder.tvBadge.text = "$dias dias"
                 holder.tvBadge.setBackgroundResource(R.drawable.bg_badge_verde)
                 holder.tvVencimento.text = formatarDataVencimento(cliente.expDateUnix)
+            }
+            // A partir daqui, dias == null: nunca conseguimos descobrir o
+            // vencimento desse cliente ainda.
+            cliente.dns.isBlank() && cliente.ultimoErro == null -> {
+                // Acabou de ser salvo (offline, VPS fora do ar, ou aguardando
+                // a primeira tentativa) - ainda não tentou nem falhou.
+                holder.tvBadge.text = "Pendente"
+                holder.tvBadge.setBackgroundResource(R.drawable.bg_badge_azul)
+                holder.tvVencimento.text = "Aguardando sincronização"
+            }
+            cliente.ultimoErro != null -> {
+                holder.tvBadge.text = "Erro"
+                holder.tvBadge.setBackgroundResource(R.drawable.bg_badge_vermelho)
+                holder.tvVencimento.text = cliente.ultimoErro
+            }
+            else -> {
+                holder.tvBadge.text = "..."
+                holder.tvBadge.setBackgroundResource(R.drawable.bg_badge_amarelo)
+                holder.tvVencimento.text = "Aguardando primeira checagem"
             }
         }
 
