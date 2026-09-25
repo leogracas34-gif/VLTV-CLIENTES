@@ -22,11 +22,19 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Compilar APK (debug)
-        run: gradle assembleDebug
+      - name: Restaurar keystore de assinatura
+        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > release.keystore
+
+      - name: Compilar APK (release, assinado com chave fixa)
+        env:
+          KEYSTORE_PATH: ${{ github.workspace }}/release.keystore
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: gradle assembleRelease
 
       - name: Publicar APK gerado
         uses: actions/upload-artifact@v4
         with:
-          name: vltv-clientes-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: vltv-clientes-release
+          path: app/build/outputs/apk/release/app-release.apk
