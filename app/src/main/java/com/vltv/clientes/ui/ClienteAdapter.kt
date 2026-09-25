@@ -55,7 +55,10 @@ class ClienteAdapter(
             dias != null && dias < 0 -> {
                 holder.tvBadge.text = "Vencido"
                 holder.tvBadge.setBackgroundResource(R.drawable.bg_badge_vermelho)
-                holder.tvVencimento.text = formatarDataVencimento(cliente.expDateUnix)
+                holder.tvVencimento.text = if (cliente.expDateUnix != null)
+                    formatarDataVencimento(cliente.expDateUnix)
+                else
+                    "Vencido — conta indisponível nos servidores"
             }
             dias != null && dias <= 3 -> {
                 // ✅ NOVO: "0 dias" é ambíguo (parece erro/zerado) - agora
