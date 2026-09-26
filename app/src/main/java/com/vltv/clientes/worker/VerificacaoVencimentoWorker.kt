@@ -8,6 +8,7 @@ import com.vltv.clientes.data.ClienteEntity
 import com.vltv.clientes.network.AppConfig
 import com.vltv.clientes.network.BackendApi
 import com.vltv.clientes.network.BuscaClienteResultado
+import com.vltv.clientes.network.EnvioResultado
 import com.vltv.clientes.network.XtreamCheck
 import com.vltv.clientes.notifications.NotificationHelper
 import kotlinx.coroutines.Dispatchers
@@ -42,6 +43,13 @@ class VerificacaoVencimentoWorker(
         val dao = db.clienteDao()
         val clientes = dao.listarAtivos()
 
+        // Quando disparado pelo botão "Enviar avisos agora" (forcarEnvio=true
+        // nos inputData), ignora a janela de horário 9h-11h e manda pra
+        // qualquer cliente que ainda não recebeu aviso hoje pro valor atual
+        // de dias - útil quando o ciclo automático falhou silenciosamente ou
+        // o usuário só quer confirmar/reenviar na hora.
+        val forcarEnvio = inputData.getBoolean(CHAVE_FORCAR_ENVIO, false)
+
         // ✅ ALTERADO: antes era um cliente de cada vez (for sequencial), então
         // o tempo total virava a SOMA do tempo de todo mundo - com vários
         // clientes, e principalmente os que demoram pra falhar (conta
@@ -51,14 +59,14 @@ class VerificacaoVencimentoWorker(
         // aparelho nem o servidor).
         coroutineScope {
             clientes.map { cliente ->
-                async { processarCliente(cliente, dao) }
+                async { processarCliente(cliente, dao, forcarEnvio) }
             }.awaitAll()
         }
 
         Result.success()
     }
 
-    private suspend fun processarCliente(cliente: ClienteEntity, dao: ClienteDao) {
+    private suspend fun processarCliente(cliente: ClienteEntity, dao: ClienteDao, forcarEnvio: Boolean = false) {
         try {
             val resultado = if (cliente.dns.isBlank()) {
                 XtreamCheck.buscarCliente(applicationContext, cliente.usuario, cliente.senha)
@@ -87,18 +95,39 @@ class VerificacaoVencimentoWorker(
                         // data exata quanto o vencido sem data (sentinela
                         // -1, quando o servidor Xtream não retorna mais os
                         // dados da conta) - nenhuma mudança nesse caso.
+                        //
+                        // forcarEnvio (botão "Enviar avisos agora") pula a
+                        // checagem de horário, mas mantém a checagem de
+                        // "já avisado hoje" - não manda duas vezes se o
+                        // ciclo automático já tiver mandado com sucesso.
                         val precisaAvisar = (dias in 0..3 || dias < 0) &&
                             atualizado.ultimoAvisoDias != dias &&
-                            estaNoHorarioDeAviso()
+                            (forcarEnvio || estaNoHorarioDeAviso())
                         if (precisaAvisar) {
-                            NotificationHelper.notificarVencimento(applicationContext, cliente.id, cliente.nome, dias)
-
                             val mensagem = AppConfig.montarMensagemPara(applicationContext, dias, cliente.nome)
                             if (mensagem != null) {
-                                BackendApi.enviarMensagem(applicationContext, cliente.whatsapp, mensagem)
+                                // ✅ CORRIGIDO: bug real - antes o resultado do
+                                // envio não era conferido, então se o envio
+                                // pro backend falhasse (rede, bot reconectando
+                                // etc.) o app marcava "já avisado" do mesmo
+                                // jeito e NUNCA mais tentava reenviar pra esse
+                                // cliente/dia - a notificação local aparecia
+                                // (ela dispara antes, sem depender do envio),
+                                // mas a mensagem de WhatsApp nunca saía de
+                                // verdade. Agora só grava ultimoAvisoDias
+                                // quando o backend confirma o recebimento; se
+                                // falhar, tenta de novo na próxima execução
+                                // (1h depois) ou quando o usuário forçar.
+                                val resultado = BackendApi.enviarMensagem(applicationContext, cliente.whatsapp, mensagem)
+                                if (resultado is EnvioResultado.Ok) {
+                                    NotificationHelper.notificarVencimento(applicationContext, cliente.id, cliente.nome, dias)
+                                    dao.atualizar(atualizado.copy(ultimoAvisoDias = dias))
+                                } else if (resultado is EnvioResultado.Falha) {
+                                    dao.atualizar(atualizado.copy(
+                                        ultimoErro = "Falha ao enviar aviso de vencimento: ${resultado.motivo}"
+                                    ))
+                                }
                             }
-
-                            dao.atualizar(atualizado.copy(ultimoAvisoDias = dias))
                         }
                     }
                 }
@@ -166,6 +195,13 @@ class VerificacaoVencimentoWorker(
 
         const val WORK_NAME_MANUAL = "verificacao_vencimento_manual"
 
+        // Nome de trabalho separado do WORK_NAME_MANUAL (sincronização normal
+        // via botão de atualizar/pull-to-refresh) - assim o spinner de
+        // "sincronizando" e o botão "Enviar avisos agora" não ficam
+        // observando/disparando o mesmo WorkInfo um do outro.
+        const val WORK_NAME_ENVIO_MANUAL = "envio_avisos_manual"
+        private const val CHAVE_FORCAR_ENVIO = "forcar_envio"
+
         // Valor usado em diasRestantes quando sabemos que a conta está
         // vencida/indisponível mas NUNCA descobrimos a data exata (conta já
         // chegou desativada, sem nenhum histórico de exp_date válido). -1
@@ -229,6 +265,29 @@ class VerificacaoVencimentoWorker(
                 .build()
             WorkManager.getInstance(context).enqueueUniqueWork(
                 WORK_NAME_MANUAL,
+                ExistingWorkPolicy.KEEP,
+                request
+            )
+        }
+
+        // Botão "Enviar avisos agora": manda pra qualquer cliente com 3/2/1/0
+        // dias (ou vencido) que ainda não recebeu aviso hoje, sem esperar a
+        // janela de horário 9h-11h. Se o ciclo automático já mandou com
+        // sucesso pra um cliente, ele é pulado normalmente (mesma checagem
+        // de ultimoAvisoDias) - não duplica mensagem.
+        fun executarEnvioAgora(context: Context) {
+            val constraints = Constraints.Builder()
+                .setRequiredNetworkType(NetworkType.CONNECTED)
+                .build()
+            val dados = Data.Builder()
+                .putBoolean(CHAVE_FORCAR_ENVIO, true)
+                .build()
+            val request = OneTimeWorkRequestBuilder<VerificacaoVencimentoWorker>()
+                .setConstraints(constraints)
+                .setInputData(dados)
+                .build()
+            WorkManager.getInstance(context).enqueueUniqueWork(
+                WORK_NAME_ENVIO_MANUAL,
                 ExistingWorkPolicy.KEEP,
                 request
             )
