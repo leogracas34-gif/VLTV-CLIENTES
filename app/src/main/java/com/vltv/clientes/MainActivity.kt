@@ -168,16 +168,39 @@ class MainActivity : AppCompatActivity() {
 
     // Abre o WhatsApp já com uma mensagem sugerida (usa o mesmo template
     // configurado em "Configurar Mensagens" pro número de dias restantes).
+    //
+    // ✅ CORRIGIDO: antes usava um link genérico (wa.me), e como o celular
+    // tem tanto o WhatsApp normal quanto o WhatsApp Business instalados,
+    // o Android decidia sozinho qual abrir (geralmente o normal, por ser
+    // o "padrão"). Como o número configurado pro bot e usado pra falar com
+    // os clientes é o do Business, agora o intent força especificamente
+    // o pacote do WhatsApp Business (com.whatsapp.w4b) primeiro - só cai
+    // pro WhatsApp normal se o Business não estiver instalado no aparelho.
     private fun abrirWhatsapp(cliente: ClienteEntity) {
         val mensagem = cliente.diasRestantes?.let {
             AppConfig.montarMensagemPara(this, it, cliente.nome)
         } ?: "Olá, ${cliente.nome}! Tudo certo com seu plano?"
 
         val texto = Uri.encode(mensagem)
+        val uri = Uri.parse("https://api.whatsapp.com/send?phone=${cliente.whatsapp}&text=$texto")
+
         try {
-            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/${cliente.whatsapp}?text=$texto")))
+            // 1ª tentativa: forçar o WhatsApp Business especificamente.
+            val intentBusiness = Intent(Intent.ACTION_VIEW, uri).apply {
+                setPackage("com.whatsapp.w4b")
+            }
+            startActivity(intentBusiness)
         } catch (e: Exception) {
-            Toast.makeText(this, "Não foi possível abrir o WhatsApp", Toast.LENGTH_SHORT).show()
+            try {
+                // 2ª tentativa: WhatsApp Business não está instalado -
+                // cai pro WhatsApp comum.
+                val intentNormal = Intent(Intent.ACTION_VIEW, uri).apply {
+                    setPackage("com.whatsapp")
+                }
+                startActivity(intentNormal)
+            } catch (e2: Exception) {
+                Toast.makeText(this, "Não foi possível abrir o WhatsApp", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
