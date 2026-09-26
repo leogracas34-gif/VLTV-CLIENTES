@@ -21,6 +21,16 @@ class CadastroClienteActivity : AppCompatActivity() {
     private var clienteExistente: ClienteEntity? = null
     private var planoSelecionado: PlanoCliente = PlanoCliente.MENSAL
 
+    // ✅ NOVO: true enquanto estamos em modo edição E o carregarCliente()
+    // (assíncrono) ainda não terminou. Corrige um bug real: se o usuário
+    // editava o nome e tocava em "Salvar" rápido demais, clienteExistente
+    // ainda estava null nesse instante - validarESalvar() então tratava
+    // como CLIENTE NOVO (caía no "else" do if/else de inserir/atualizar),
+    // criando um cadastro duplicado do zero em vez de atualizar o
+    // original, que ficava intocado (por isso parecia que a edição "não
+    // salvava").
+    private var aguardandoCarregarCliente = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityCadastroClienteBinding.inflate(layoutInflater)
@@ -39,6 +49,7 @@ class CadastroClienteActivity : AppCompatActivity() {
             binding.tvTituloTela.text = "Editar Cliente"
             binding.btnSalvar.text = "Salvar Alterações"
             binding.btnExcluir.visibility = android.view.View.VISIBLE
+            aguardandoCarregarCliente = true
             carregarCliente(clienteId)
         }
 
@@ -78,8 +89,13 @@ class CadastroClienteActivity : AppCompatActivity() {
 
     private fun carregarCliente(id: Long) {
         lifecycleScope.launch {
-            val cliente = database.clienteDao().buscarPorId(id) ?: return@launch
+            val cliente = database.clienteDao().buscarPorId(id)
+            if (cliente == null) {
+                aguardandoCarregarCliente = false
+                return@launch
+            }
             clienteExistente = cliente
+            aguardandoCarregarCliente = false
             binding.etNome.setText(cliente.nome)
             binding.etWhatsapp.setText(cliente.whatsapp)
             binding.etUsuario.setText(cliente.usuario)
@@ -102,6 +118,15 @@ class CadastroClienteActivity : AppCompatActivity() {
     // o WorkManager tenta de novo sozinho assim que a rede voltar, e o botão
     // "Sincronizar" da tela principal também pega esse cliente pendente.
     private fun validarESalvar() {
+        if (aguardandoCarregarCliente) {
+            Toast.makeText(
+                this,
+                "Aguarde um instante, ainda carregando os dados do cliente...",
+                Toast.LENGTH_SHORT
+            ).show()
+            return
+        }
+
         val nome = binding.etNome.text.toString().trim()
         val whatsappBruto = binding.etWhatsapp.text.toString().trim()
         val usuario = binding.etUsuario.text.toString().trim()
