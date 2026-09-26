@@ -80,7 +80,14 @@ class VerificacaoVencimentoWorker(
 
                     val dias = r.diasRestantes
                     if (dias != null) {
-                        val precisaAvisar = (dias in 1..3 || dias < 0) &&
+                        // ✅ ALTERADO: "dias in 0..3" (era "1..3") - agora
+                        // manda mensagem também no dia exato do vencimento
+                        // ("vence hoje"), não só nos 3 dias anteriores. O
+                        // "dias < 0" continua cobrindo tanto o vencido com
+                        // data exata quanto o vencido sem data (sentinela
+                        // -1, quando o servidor Xtream não retorna mais os
+                        // dados da conta) - nenhuma mudança nesse caso.
+                        val precisaAvisar = (dias in 0..3 || dias < 0) &&
                             atualizado.ultimoAvisoDias != dias &&
                             estaNoHorarioDeAviso()
                         if (precisaAvisar) {
