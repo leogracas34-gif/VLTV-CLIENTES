@@ -5,6 +5,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.util.Calendar
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
@@ -59,6 +60,19 @@ object XtreamCheck {
     // diagnóstico, ex.: "fibercdn.sbs".
     private fun dominioDe(url: String): String =
         url.removePrefix("http://").removePrefix("https://").removeSuffix("/")
+
+    // ✅ NOVO: trunca um instante (epoch millis) para meia-noite do dia
+    // local correspondente. Usado pra comparar DATAS de calendário, e não
+    // instantes exatos — ver explicação no cálculo de diasRestantes abaixo.
+    private fun inicioDoDia(epochMillis: Long): Long {
+        val cal = Calendar.getInstance()
+        cal.timeInMillis = epochMillis
+        cal.set(Calendar.HOUR_OF_DAY, 0)
+        cal.set(Calendar.MINUTE, 0)
+        cal.set(Calendar.SECOND, 0)
+        cal.set(Calendar.MILLISECOND, 0)
+        return cal.timeInMillis
+    }
 
     // Retorna o resultado (se achou e está ativo) OU o motivo exato da
     // falha nesse servidor específico — nunca os dois nulos ao mesmo tempo.
@@ -118,17 +132,29 @@ object XtreamCheck {
                     return null to "usuário/senha não encontrados neste servidor"
                 }
 
-                // ✅ CORRIGIDO: cálculo de dias restantes agora usa floorDiv
-                // (igual ao PlanoUtils do VLTV Play), não mais Math.ceil.
-                // Math.ceil arredonda em direção ao 0 pra diferenças
-                // negativas pequenas — uma conta vencida há só algumas horas
-                // (ex.: -0,2 dias) virava "0 dias restantes" em vez de "-1",
-                // então não entrava em "Vencidos" no mesmo dia em que venceu.
-                // floorDiv arredonda sempre pra baixo, então qualquer
-                // instante já vencido vira negativo de verdade.
+                // ✅ CORRIGIDO (2ª vez): dias restantes agora é uma
+                // diferença de DATAS DE CALENDÁRIO, não de instantes exatos.
+                //
+                // O jeito antigo (floorDiv da diferença exata em ms) fazia
+                // o contador "encolher" durante o próprio dia: às 00h05 de
+                // hoje "faltam 3 dias" e às 23h55 do MESMO dia já "faltam 2
+                // dias", porque já tinham se passado mais de 3×24h completas
+                // até o instante exato do vencimento. Isso é enganoso pro
+                // cliente, que pensa em dias de calendário, não em horas
+                // exatas.
+                //
+                // Agora truncamos tanto "agora" quanto "vencimento" pra
+                // meia-noite do dia local de cada um, e só então subtraímos
+                // dias inteiros. Resultado:
+                //  - Vence dia 28, hoje é dia 25 → sempre "3 dias" o dia
+                //    inteiro de 25, só vira "2 dias" quando virar 26.
+                //  - Vence em qualquer horário do dia de hoje → "0 dias"
+                //    (vence hoje) o dia inteiro, só vira negativo (vencido)
+                //    a partir da meia-noite seguinte.
                 val diasRestantes = if (expDateUnix != null) {
-                    val diffMs = (expDateUnix * 1000L) - System.currentTimeMillis()
-                    diffMs.floorDiv(TimeUnit.DAYS.toMillis(1)).toInt()
+                    val inicioHoje = inicioDoDia(System.currentTimeMillis())
+                    val inicioVencimento = inicioDoDia(expDateUnix * 1000L)
+                    ((inicioVencimento - inicioHoje) / TimeUnit.DAYS.toMillis(1)).toInt()
                 } else null
 
                 ResultadoBusca(dns = urlBase, expDateUnix = expDateUnix, diasRestantes = diasRestantes) to "ok"
