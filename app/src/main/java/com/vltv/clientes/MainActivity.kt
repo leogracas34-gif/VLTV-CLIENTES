@@ -71,6 +71,7 @@ class MainActivity : AppCompatActivity() {
 
         binding.btnSincronizar.setOnClickListener { sincronizarAgora() }
         binding.layoutBannerPendente.setOnClickListener { sincronizarAgora() }
+        binding.btnEnviarAvisosAgora.setOnClickListener { enviarAvisosAgora() }
 
         binding.chipTodos.setOnClickListener { selecionarFiltro(Filtro.TODOS) }
         binding.chipVencendo.setOnClickListener { selecionarFiltro(Filtro.VENCENDO) }
@@ -91,6 +92,12 @@ class MainActivity : AppCompatActivity() {
         WorkManager.getInstance(this)
             .getWorkInfosForUniqueWorkLiveData(VerificacaoVencimentoWorker.WORK_NAME_MANUAL)
             .observe(this) { infos -> observarSincronizacao(infos) }
+
+        // Observa o trabalho do botão "Enviar avisos agora" separadamente,
+        // só pra avisar quando terminar - não mexe no spinner de sincronizar.
+        WorkManager.getInstance(this)
+            .getWorkInfosForUniqueWorkLiveData(VerificacaoVencimentoWorker.WORK_NAME_ENVIO_MANUAL)
+            .observe(this) { infos -> observarEnvioManual(infos) }
 
         // Checagem em segundo plano agendada pra rodar 1x/dia...
         VerificacaoVencimentoWorker.agendar(this)
@@ -230,6 +237,35 @@ class MainActivity : AppCompatActivity() {
                 Toast.LENGTH_SHORT
             ).show()
         }
+    }
+
+    private var enviandoAvisos = false
+
+    // Botão "Enviar avisos agora": força o mesmo fluxo do ciclo automático
+    // (3/2/1/0 dias ou vencido), pulando a janela 9h-11h. Clientes que já
+    // receberam aviso hoje continuam sendo pulados normalmente - não
+    // duplica quem o envio automático já mandou com sucesso.
+    private fun enviarAvisosAgora() {
+        enviandoAvisos = true
+        Toast.makeText(this, "Enviando avisos de vencimento...", Toast.LENGTH_SHORT).show()
+        VerificacaoVencimentoWorker.executarEnvioAgora(this)
+    }
+
+    private fun observarEnvioManual(infos: List<WorkInfo>) {
+        if (!enviandoAvisos) return
+        val terminou = infos.any {
+            it.state == WorkInfo.State.SUCCEEDED || it.state == WorkInfo.State.FAILED
+        }
+        if (!terminou) return
+
+        enviandoAvisos = false
+        val falhou = infos.any { it.state == WorkInfo.State.FAILED }
+        Toast.makeText(
+            this,
+            if (falhou) "Não foi possível concluir o envio. Veja a observação de cada cliente para detalhes."
+            else "Avisos enviados (quem já tinha vencimento próximo/vencido e ainda não recebeu aviso hoje).",
+            Toast.LENGTH_LONG
+        ).show()
     }
 
     private fun selecionarFiltro(filtro: Filtro) {
