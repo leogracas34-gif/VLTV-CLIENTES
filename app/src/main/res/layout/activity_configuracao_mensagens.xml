@@ -143,6 +143,26 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:text="Vence hoje"
+            android:textColor="@color/cinza_texto"
+            android:textSize="12sp"
+            android:layout_marginBottom="6dp" />
+
+        <EditText
+            android:id="@+id/etMsgHoje"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_input"
+            android:textColor="@color/branco"
+            android:textColorHint="@color/cinza_hint"
+            android:inputType="textMultiLine"
+            android:minLines="2"
+            android:padding="14dp"
+            android:layout_marginBottom="16dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
             android:text="Plano já venceu"
             android:textColor="@color/cinza_texto"
             android:textSize="12sp"
