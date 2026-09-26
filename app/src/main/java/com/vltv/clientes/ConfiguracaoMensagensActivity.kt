@@ -20,6 +20,7 @@ class ConfiguracaoMensagensActivity : AppCompatActivity() {
         binding.etMsg3Dias.setText(AppConfig.getMensagem3Dias(this))
         binding.etMsg2Dias.setText(AppConfig.getMensagem2Dias(this))
         binding.etMsg1Dia.setText(AppConfig.getMensagem1Dia(this))
+        binding.etMsgHoje.setText(AppConfig.getMensagemHoje(this))
         binding.etMsgVencido.setText(AppConfig.getMensagemVencido(this))
         binding.etChavePix.setText(AppConfig.getChavePix(this))
 
@@ -33,6 +34,7 @@ class ConfiguracaoMensagensActivity : AppCompatActivity() {
                 binding.etMsg3Dias.text.toString(),
                 binding.etMsg2Dias.text.toString(),
                 binding.etMsg1Dia.text.toString(),
+                binding.etMsgHoje.text.toString(),
                 binding.etMsgVencido.text.toString()
             )
             AppConfig.salvarChavePix(this, binding.etChavePix.text.toString())
