@@ -257,17 +257,34 @@
             android:textSize="12sp"
             android:layout_marginBottom="6dp" />
 
-        <EditText
-            android:id="@+id/etSenha"
+        <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="@drawable/bg_input"
-            android:hint="Senha Xtream"
-            android:textColor="@color/branco"
-            android:textColorHint="@color/cinza_hint"
-            android:inputType="textPassword"
-            android:padding="14dp"
-            android:layout_marginBottom="24dp" />
+            android:layout_marginBottom="24dp">
+
+            <EditText
+                android:id="@+id/etSenha"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_input"
+                android:hint="Senha Xtream"
+                android:textColor="@color/branco"
+                android:textColorHint="@color/cinza_hint"
+                android:inputType="textPassword"
+                android:paddingStart="14dp"
+                android:paddingTop="14dp"
+                android:paddingBottom="14dp"
+                android:paddingEnd="52dp" />
+
+            <ImageButton
+                android:id="@+id/btnVerSenha"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:layout_gravity="center_vertical|end"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@drawable/ic_eye"
+                android:contentDescription="Mostrar ou ocultar senha" />
+        </FrameLayout>
 
         <TextView
             android:id="@+id/btnSalvar"

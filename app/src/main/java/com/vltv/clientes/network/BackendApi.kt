@@ -26,7 +26,14 @@ object BackendApi {
             .build()
     }
 
-    suspend fun enviarMensagem(context: Context, telefone: String, mensagem: String): EnvioResultado {
+    // imagemBase64: string base64 (sem o prefixo "data:image/...;base64,")
+    // de uma imagem JPEG opcional a ser enviada junto com a mensagem.
+    suspend fun enviarMensagem(
+        context: Context,
+        telefone: String,
+        mensagem: String,
+        imagemBase64: String? = null
+    ): EnvioResultado {
         val baseUrl = AppConfig.getBackendUrl(context)
         val apiKey = AppConfig.getApiKey(context)
 
@@ -39,6 +46,7 @@ object BackendApi {
                 val json = JSONObject().apply {
                     put("telefone", telefone)
                     put("mensagem", mensagem)
+                    if (!imagemBase64.isNullOrBlank()) put("imagem", imagemBase64)
                 }
                 val body = json.toString().toRequestBody("application/json".toMediaType())
 

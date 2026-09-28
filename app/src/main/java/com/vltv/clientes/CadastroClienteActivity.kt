@@ -1,6 +1,7 @@
 package com.vltv.clientes
 
 import android.os.Bundle
+import android.text.InputType
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -20,6 +21,7 @@ class CadastroClienteActivity : AppCompatActivity() {
     private val database by lazy { AppDatabase.getDatabase(this) }
     private var clienteExistente: ClienteEntity? = null
     private var planoSelecionado: PlanoCliente = PlanoCliente.MENSAL
+    private var senhaVisivel = false
 
     // ✅ NOVO: true enquanto estamos em modo edição E o carregarCliente()
     // (assíncrono) ainda não terminou. Corrige um bug real: se o usuário
@@ -37,6 +39,7 @@ class CadastroClienteActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         binding.btnVoltar.setOnClickListener { finish() }
+        binding.btnVerSenha.setOnClickListener { alternarVisibilidadeSenha() }
 
         binding.chipMensal.setOnClickListener { selecionarPlano(PlanoCliente.MENSAL, preencherValorPadrao = true) }
         binding.chipTrimestral.setOnClickListener { selecionarPlano(PlanoCliente.TRIMESTRAL, preencherValorPadrao = true) }
@@ -61,6 +64,19 @@ class CadastroClienteActivity : AppCompatActivity() {
     // plano, quando vier de um toque do usuário). Ao carregar um cliente já
     // existente, chamamos sem preencherValorPadrao pra não sobrescrever um
     // valor combinado manualmente com o cliente.
+    // Alterna entre senha oculta (••••) e visível, mantendo o cursor onde estava.
+    private fun alternarVisibilidadeSenha() {
+        senhaVisivel = !senhaVisivel
+        val cursor = binding.etSenha.selectionEnd
+        binding.etSenha.inputType = if (senhaVisivel) {
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
+        } else {
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+        binding.etSenha.setSelection(cursor.coerceIn(0, binding.etSenha.text.length))
+        binding.btnVerSenha.setImageResource(if (senhaVisivel) R.drawable.ic_eye_off else R.drawable.ic_eye)
+    }
+
     private fun selecionarPlano(plano: PlanoCliente, preencherValorPadrao: Boolean) {
         planoSelecionado = plano
 

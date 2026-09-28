@@ -24,6 +24,7 @@ class ClienteAdapter(
         val tvBadge: android.widget.TextView = view.findViewById(R.id.tvBadgeStatus)
         val tvUsuario: android.widget.TextView = view.findViewById(R.id.tvUsuarioCliente)
         val tvVencimento: android.widget.TextView = view.findViewById(R.id.tvVencimentoCliente)
+        val tvObservacao: android.widget.TextView = view.findViewById(R.id.tvObservacaoCliente)
         val btnWhatsapp: android.widget.ImageButton = view.findViewById(R.id.btnWhatsappCliente)
         val btnMenu: android.widget.ImageButton = view.findViewById(R.id.btnMenuCliente)
     }
@@ -98,6 +99,15 @@ class ClienteAdapter(
                 holder.tvBadge.setBackgroundResource(R.drawable.bg_badge_amarelo)
                 holder.tvVencimento.text = "Aguardando primeira checagem"
             }
+        }
+
+        // Observação/alerta do cliente: só aparece no card se tiver algo escrito.
+        val observacao = cliente.observacao?.trim()
+        if (observacao.isNullOrEmpty()) {
+            holder.tvObservacao.visibility = View.GONE
+        } else {
+            holder.tvObservacao.text = observacao
+            holder.tvObservacao.visibility = View.VISIBLE
         }
 
         holder.itemView.setOnClickListener { onClick(cliente) }

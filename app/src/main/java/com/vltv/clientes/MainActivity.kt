@@ -69,6 +69,10 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, ConfiguracaoMensagensActivity::class.java))
         }
 
+        binding.btnTransmissao.setOnClickListener {
+            startActivity(Intent(this, TransmissaoActivity::class.java))
+        }
+
         binding.btnSincronizar.setOnClickListener { sincronizarAgora() }
         binding.layoutBannerPendente.setOnClickListener { sincronizarAgora() }
         binding.btnEnviarAvisosAgora.setOnClickListener { enviarAvisosAgora() }

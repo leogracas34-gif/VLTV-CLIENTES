@@ -45,5 +45,10 @@
             android:exported="false"
             android:theme="@style/Theme.VltvClientes" />
 
+        <activity
+            android:name=".TransmissaoActivity"
+            android:exported="false"
+            android:theme="@style/Theme.VltvClientes" />
+
     </application>
 </manifest>

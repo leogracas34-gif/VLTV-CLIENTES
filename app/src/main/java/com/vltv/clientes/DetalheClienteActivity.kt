@@ -1,6 +1,10 @@
 package com.vltv.clientes
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.os.Bundle
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.vltv.clientes.data.AppDatabase
@@ -20,6 +24,8 @@ class DetalheClienteActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityDetalheClienteBinding
     private val database by lazy { AppDatabase.getDatabase(this) }
+    private var senhaVisivel = false
+    private var senhaAtual = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -53,6 +59,20 @@ class DetalheClienteActivity : AppCompatActivity() {
         binding.tvWhatsapp.text = formatarTelefone(cliente.whatsapp)
         binding.tvStatus.text = descreverStatus(cliente)
 
+        // Acesso (login/senha): a senha começa oculta; o olhinho mostra/oculta
+        // e os botões de copiar deixam mandar pro cliente sem precisar entrar
+        // no servidor.
+        senhaAtual = cliente.senha
+        senhaVisivel = false
+        binding.tvUsuario.text = cliente.usuario
+        atualizarSenhaNaTela()
+        binding.btnVerSenhaDetalhe.setOnClickListener {
+            senhaVisivel = !senhaVisivel
+            atualizarSenhaNaTela()
+        }
+        binding.btnCopiarUsuario.setOnClickListener { copiar("Usuário", cliente.usuario) }
+        binding.btnCopiarSenha.setOnClickListener { copiar("Senha", cliente.senha) }
+
         val plano = try {
             PlanoCliente.valueOf(cliente.plano)
         } catch (e: IllegalArgumentException) {
@@ -68,6 +88,17 @@ class DetalheClienteActivity : AppCompatActivity() {
             binding.layoutObservacao.visibility = android.view.View.VISIBLE
             binding.tvObservacao.text = observacao
         }
+    }
+
+    private fun atualizarSenhaNaTela() {
+        binding.tvSenha.text = if (senhaVisivel) senhaAtual else "•".repeat(senhaAtual.length.coerceAtLeast(6))
+        binding.btnVerSenhaDetalhe.setImageResource(if (senhaVisivel) R.drawable.ic_eye_off else R.drawable.ic_eye)
+    }
+
+    private fun copiar(rotulo: String, texto: String) {
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText(rotulo, texto))
+        Toast.makeText(this, "$rotulo copiado", Toast.LENGTH_SHORT).show()
     }
 
     // ✅ CORRIGIDO: mesma prioridade da tela principal (ClienteAdapter) -
