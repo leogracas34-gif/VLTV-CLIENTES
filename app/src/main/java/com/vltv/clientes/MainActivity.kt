@@ -75,7 +75,16 @@ class MainActivity : AppCompatActivity() {
 
         binding.btnSincronizar.setOnClickListener { sincronizarAgora() }
         binding.layoutBannerPendente.setOnClickListener { sincronizarAgora() }
-        binding.btnEnviarAvisosAgora.setOnClickListener { enviarAvisosAgora() }
+        // Trava de segurança: o botão fica colado nos outros ícones do topo e um
+        // toque sem querer disparava os avisos direto - agora pede confirmação.
+        binding.btnEnviarAvisosAgora.setOnClickListener {
+            AlertDialog.Builder(this)
+                .setTitle("Enviar avisos agora?")
+                .setMessage("Isso envia agora os avisos de vencimento por WhatsApp para os clientes que estão nos prazos de aviso (3, 2, 1 dia, vence hoje ou vencido) e ainda não receberam hoje.")
+                .setPositiveButton("Enviar") { _, _ -> enviarAvisosAgora() }
+                .setNegativeButton("Cancelar", null)
+                .show()
+        }
 
         binding.chipTodos.setOnClickListener { selecionarFiltro(Filtro.TODOS) }
         binding.chipVencendo.setOnClickListener { selecionarFiltro(Filtro.VENCENDO) }
