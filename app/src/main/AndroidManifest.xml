@@ -5,6 +5,9 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Só é de fato exigida em Android 9 ou anterior - a partir do 10 o
+         MediaStore não precisa dessa permissão pra salvar as próprias fotos. -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
 
     <application
         android:allowBackup="true"
@@ -49,6 +52,21 @@
             android:name=".TransmissaoActivity"
             android:exported="false"
             android:theme="@style/Theme.VltvClientes" />
+
+        <activity
+            android:name=".GeradorBannerActivity"
+            android:exported="false"
+            android:theme="@style/Theme.VltvClientes" />
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
     </application>
 </manifest>

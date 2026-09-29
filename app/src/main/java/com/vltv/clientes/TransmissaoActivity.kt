@@ -68,6 +68,7 @@ class TransmissaoActivity : AppCompatActivity() {
         }
 
         binding.btnVoltar.setOnClickListener { finish() }
+        binding.btnGeradorBanner.setOnClickListener { startActivity(Intent(this, GeradorBannerActivity::class.java)) }
 
         binding.btnEscolherImagem.setOnClickListener { escolherImagemLauncher.launch("image/*") }
         binding.btnRemoverImagem.setOnClickListener { removerImagem() }

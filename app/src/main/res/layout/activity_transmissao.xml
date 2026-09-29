@@ -35,6 +35,14 @@
             android:textColor="@color/branco"
             android:textSize="20sp"
             android:textStyle="bold" />
+
+        <ImageButton
+            android:id="@+id/btnGeradorBanner"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_image"
+            android:contentDescription="Gerador de banner" />
     </LinearLayout>
 
     <androidx.core.widget.NestedScrollView

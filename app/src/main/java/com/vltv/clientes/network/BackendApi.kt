@@ -15,6 +15,20 @@ sealed class EnvioResultado {
     data class Falha(val motivo: String) : EnvioResultado()
 }
 
+data class TmdbResultado(
+    val id: Int,
+    val tipo: String, // "filme" ou "serie"
+    val titulo: String,
+    val ano: String,
+    val thumbUrl: String,
+    val posterUrl: String
+)
+
+sealed class BuscaTmdbResultado {
+    data class Ok(val resultados: List<TmdbResultado>) : BuscaTmdbResultado()
+    data class Falha(val motivo: String) : BuscaTmdbResultado()
+}
+
 // Fala com o backend Node.js/Baileys que fica na VPS - o único trabalho
 // dele é receber "manda essa mensagem pra esse WhatsApp" e enfileirar.
 object BackendApi {
@@ -65,6 +79,70 @@ object BackendApi {
                 }
             } catch (e: Exception) {
                 EnvioResultado.Falha("${e.javaClass.simpleName}: ${e.message}")
+            }
+        }
+    }
+
+    // Baixa uma imagem pública (usado pra miniaturas e pôsteres do TMDB - a
+    // imagem em si vem direto do CDN deles, sem passar pelo nosso backend).
+    suspend fun baixarBitmap(url: String): android.graphics.Bitmap? {
+        return withContext(Dispatchers.IO) {
+            try {
+                val request = Request.Builder().url(url).get().build()
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) return@use null
+                    response.body?.byteStream()?.use { stream ->
+                        android.graphics.BitmapFactory.decodeStream(stream)
+                    }
+                }
+            } catch (e: Exception) {
+                null
+            }
+        }
+    }
+
+    // Busca filmes/séries pelo nome, pra usar como pôster no Gerador de Banner.
+    // A chave do TMDB fica só no backend - o app nunca vê ela.
+    suspend fun buscarTmdb(context: Context, termo: String): BuscaTmdbResultado {
+        val baseUrl = AppConfig.getBackendUrl(context)
+        val apiKey = AppConfig.getApiKey(context)
+
+        if (baseUrl.isBlank() || apiKey.isBlank()) {
+            return BuscaTmdbResultado.Falha("Servidor de envio não configurado. Vá em Configurações → Servidor de Envio.")
+        }
+
+        return withContext(Dispatchers.IO) {
+            try {
+                val urlBusca = "$baseUrl/tmdb/buscar?q=${java.net.URLEncoder.encode(termo, "UTF-8")}"
+                val request = Request.Builder()
+                    .url(urlBusca)
+                    .header("x-api-key", apiKey)
+                    .get()
+                    .build()
+
+                client.newCall(request).execute().use { response ->
+                    val corpo = response.body?.string().orEmpty()
+                    if (!response.isSuccessful) {
+                        val erro = runCatching { JSONObject(corpo).optString("erro") }.getOrNull()
+                        return@use BuscaTmdbResultado.Falha(erro?.takeIf { it.isNotBlank() } ?: "Servidor respondeu ${response.code}")
+                    }
+                    val json = JSONObject(corpo)
+                    val array = json.optJSONArray("resultados") ?: org.json.JSONArray()
+                    val lista = (0 until array.length()).map { i ->
+                        val item = array.getJSONObject(i)
+                        TmdbResultado(
+                            id = item.getInt("id"),
+                            tipo = item.getString("tipo"),
+                            titulo = item.getString("titulo"),
+                            ano = item.optString("ano"),
+                            thumbUrl = item.getString("thumbUrl"),
+                            posterUrl = item.getString("posterUrl")
+                        )
+                    }
+                    BuscaTmdbResultado.Ok(lista)
+                }
+            } catch (e: Exception) {
+                BuscaTmdbResultado.Falha("${e.javaClass.simpleName}: ${e.message}")
             }
         }
     }
