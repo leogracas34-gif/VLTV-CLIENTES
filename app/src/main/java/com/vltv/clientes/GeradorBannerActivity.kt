@@ -158,9 +158,11 @@ class GeradorBannerActivity : AppCompatActivity() {
             }
 
             posterAtual = poster
-            binding.etTitulo.setText(item.titulo)
-            binding.tvLabelTitulo.visibility = View.VISIBLE
-            binding.etTitulo.visibility = View.VISIBLE
+            binding.etSinopse.setText(item.sinopse)
+            binding.tvLabelSinopse.visibility = View.VISIBLE
+            binding.etSinopse.visibility = View.VISIBLE
+            binding.tvLabelFrase.visibility = View.VISIBLE
+            binding.etFrase.visibility = View.VISIBLE
             binding.btnGerarBanner.visibility = View.VISIBLE
 
             gerarBanner()
@@ -169,22 +171,20 @@ class GeradorBannerActivity : AppCompatActivity() {
 
     private fun gerarBanner() {
         val poster = posterAtual
-        val titulo = binding.etTitulo.text.toString().trim()
 
         if (poster == null) {
             Toast.makeText(this, "Escolha um filme ou série primeiro.", Toast.LENGTH_SHORT).show()
             return
         }
-        if (titulo.isBlank()) {
-            Toast.makeText(this, "O título não pode ficar vazio.", Toast.LENGTH_SHORT).show()
-            return
-        }
+
+        val sinopse = binding.etSinopse.text.toString()
+        val frase = binding.etFrase.text.toString()
 
         lifecycleScope.launch {
             // A composição é trabalho de CPU (desenhar no Canvas), não de IO -
             // Dispatchers.Default é o certo aqui, pra não travar a tela.
             val banner = withContext(Dispatchers.Default) {
-                BannerComposer.compor(poster, categoriaSelecionada, titulo)
+                BannerComposer.compor(this@GeradorBannerActivity, poster, categoriaSelecionada, sinopse, frase)
             }
             bannerGerado = banner
             binding.ivPreviewBanner.setImageBitmap(banner)

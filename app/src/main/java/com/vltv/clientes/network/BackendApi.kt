@@ -20,6 +20,7 @@ data class TmdbResultado(
     val tipo: String, // "filme" ou "serie"
     val titulo: String,
     val ano: String,
+    val sinopse: String,
     val thumbUrl: String,
     val posterUrl: String
 )
@@ -135,6 +136,7 @@ object BackendApi {
                             tipo = item.getString("tipo"),
                             titulo = item.getString("titulo"),
                             ano = item.optString("ano"),
+                            sinopse = item.optString("sinopse"),
                             thumbUrl = item.getString("thumbUrl"),
                             posterUrl = item.getString("posterUrl")
                         )

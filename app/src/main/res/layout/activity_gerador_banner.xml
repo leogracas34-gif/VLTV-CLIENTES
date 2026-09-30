@@ -197,12 +197,14 @@
                 tools:listitem="@layout/item_tmdb_resultado"
                 tools:visibility="visible" />
 
-            <!-- Título e geração -->
+            <!-- Sinopse e geração (o título não é repetido em texto - o
+                 pôster oficial do TMDB já traz o nome do filme/série na
+                 própria arte) -->
             <TextView
-                android:id="@+id/tvLabelTitulo"
+                android:id="@+id/tvLabelSinopse"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Título no banner"
+                android:text="Sinopse (puxada do TMDB, edite se quiser)"
                 android:textColor="@color/cinza_texto"
                 android:textSize="13sp"
                 android:textStyle="bold"
@@ -211,7 +213,35 @@
                 tools:visibility="visible" />
 
             <EditText
-                android:id="@+id/etTitulo"
+                android:id="@+id/etSinopse"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minLines="3"
+                android:gravity="top|start"
+                android:background="@drawable/bg_input"
+                android:padding="14dp"
+                android:textColor="@color/branco"
+                android:textColorHint="@color/cinza_hint"
+                android:textSize="14sp"
+                android:hint="Um trecho curto sobre o filme/série"
+                android:visibility="gone"
+                android:layout_marginBottom="14dp"
+                tools:visibility="visible" />
+
+            <TextView
+                android:id="@+id/tvLabelFrase"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Frase de chamada (opcional)"
+                android:textColor="@color/cinza_texto"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="8dp"
+                android:visibility="gone"
+                tools:visibility="visible" />
+
+            <EditText
+                android:id="@+id/etFrase"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:background="@drawable/bg_input"
@@ -219,7 +249,7 @@
                 android:textColor="@color/branco"
                 android:textColorHint="@color/cinza_hint"
                 android:textSize="14sp"
-                android:hint="Título que aparece no banner"
+                android:hint="Ex: Assista agora! · Já disponível no catálogo"
                 android:visibility="gone"
                 android:layout_marginBottom="14dp"
                 tools:visibility="visible" />
