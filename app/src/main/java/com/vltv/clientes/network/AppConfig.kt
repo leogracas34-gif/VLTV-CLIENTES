@@ -18,12 +18,17 @@ object AppConfig {
     private const val KEY_MSG_1_DIA = "msg_1_dia"
     private const val KEY_MSG_HOJE = "msg_hoje"
     private const val KEY_MSG_VENCIDO = "msg_vencido"
+    private const val KEY_MSG_RENOVACAO = "msg_renovacao"
 
     const val PADRAO_MSG_3_DIAS = "Olá, {nome}! 👋\n\nSeu plano vence em 3 dias. Para não perder o acesso, renove com antecedência.\n\n💳 Chave Pix para pagamento: {pix}\n\nQualquer dúvida, estou à disposição!"
     const val PADRAO_MSG_2_DIAS = "Olá, {nome}!\n\nFaltam apenas 2 dias para o vencimento do seu plano. Já pensou em renovar?\n\n💳 Chave Pix para pagamento: {pix}"
     const val PADRAO_MSG_1_DIA = "Olá, {nome}! ⚠️\n\nSeu plano vence amanhã! Renove agora mesmo para continuar sem interrupção.\n\n💳 Chave Pix para pagamento: {pix}"
     const val PADRAO_MSG_HOJE = "Olá, {nome}! ⚠️\n\nSeu plano vence hoje! Renove ainda hoje para continuar sem interrupção no acesso.\n\n💳 Chave Pix para pagamento: {pix}"
     const val PADRAO_MSG_VENCIDO = "Olá, {nome}.\n\nSeu plano venceu. Para voltar a ter acesso, é só renovar.\n\n💳 Chave Pix para pagamento: {pix}\n\nQualquer dúvida, estou à disposição!"
+
+    // Mensagem enviada ao cliente depois que o pagamento é confirmado e o plano
+    // renovado. Campos automáticos: {nome}, {login} e {vencimento}.
+    const val PADRAO_MSG_RENOVACAO = "Olá, *{nome}*\n\nSeu pagamento foi confirmado e o seu plano da *VLTV Play* foi renovado com sucesso! ✅\n\n*Login:* {login}\n*Novo vencimento:* {vencimento}\n\nObrigado pela confiança!\n\n🌐 https://vltvplay.tech\n\nQualquer dúvida, estamos à disposição."
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -66,6 +71,13 @@ object AppConfig {
             .putString(KEY_MSG_HOJE, msgHoje)
             .putString(KEY_MSG_VENCIDO, msgVencido)
             .apply()
+    }
+
+    fun getMensagemRenovacao(context: Context): String =
+        prefs(context).getString(KEY_MSG_RENOVACAO, PADRAO_MSG_RENOVACAO) ?: PADRAO_MSG_RENOVACAO
+
+    fun salvarMensagemRenovacao(context: Context, mensagem: String) {
+        prefs(context).edit().putString(KEY_MSG_RENOVACAO, mensagem).apply()
     }
 
     // Monta a mensagem certa pro número de dias restantes, substituindo
