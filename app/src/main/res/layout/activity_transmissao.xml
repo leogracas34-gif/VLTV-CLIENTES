@@ -86,10 +86,40 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Use {nome} pra inserir o nome de cada cliente automaticamente na mensagem dele."
+                android:text="Campos automáticos de cada cliente: {nome}, {login} e {vencimento}."
                 android:textColor="@color/cinza_texto_escuro"
                 android:textSize="11.5sp"
                 android:layout_marginTop="6dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginTop="8dp">
+
+                <TextView
+                    android:id="@+id/btnModeloRenovacao"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Usar modelo de renovação"
+                    android:textColor="@color/branco"
+                    android:textSize="12.5sp"
+                    android:textStyle="bold"
+                    android:background="?attr/selectableItemBackground"
+                    android:padding="4dp" />
+
+                <TextView
+                    android:id="@+id/btnSalvarModelo"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Salvar como modelo"
+                    android:textColor="@color/vermelho_accent"
+                    android:textSize="12.5sp"
+                    android:textStyle="bold"
+                    android:background="?attr/selectableItemBackground"
+                    android:padding="4dp" />
+            </LinearLayout>
 
             <!-- Imagem opcional -->
             <TextView
