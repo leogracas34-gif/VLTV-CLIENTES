@@ -1,6 +1,7 @@
 package com.vltv.clientes
 
 import android.Manifest
+import android.content.ClipData
 import android.content.ContentValues
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -8,6 +9,7 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
@@ -48,9 +50,11 @@ import java.util.Date
 import java.util.Locale
 
 // Tela do Gerador de Banner de filme/série: busca o pôster no TMDB, escolhe
-// o selo, o formato (Story ou Feed) e o modelo (Cinema, Cartaz, Neon ou
-// Dourado) olhando as miniaturas ao vivo, e gera o banner. Tudo é desenhado
+// o selo, o formato (Story, Feed ou Quadrado) e o modelo (Cinema, Cartaz, Neon ou
+// Dourado...) olhando as miniaturas ao vivo, e gera o banner. Tudo é desenhado
 // direto no Canvas, sem depender de internet nem de app externo.
+// O botão "Transmitir" devolve o banner pra tela de Transmissão (que abre
+// esta tela esperando resultado), onde você escolhe os clientes e envia.
 class GeradorBannerActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityGeradorBannerBinding
@@ -105,7 +109,12 @@ class GeradorBannerActivity : AppCompatActivity() {
 
         binding.btnGerarBanner.setOnClickListener { gerarBanner() }
         binding.btnSalvar.setOnClickListener { pedirPermissaoESalvar() }
-        binding.btnCompartilhar.setOnClickListener { compartilhar() }
+        binding.btnCompartilhar.setOnClickListener { enviarParaTransmissao() }
+        // Segurar o botão ainda abre o compartilhamento normal (WhatsApp, Instagram...)
+        binding.btnCompartilhar.setOnLongClickListener {
+            compartilharExterno()
+            true
+        }
     }
 
     private fun dp(valor: Int): Int = (valor * resources.displayMetrics.density).toInt()
@@ -303,6 +312,7 @@ class GeradorBannerActivity : AppCompatActivity() {
                     layoutParams = when (params.formato) {
                         FormatoBanner.STORY -> LinearLayout.LayoutParams(dp(104), dp(184))
                         FormatoBanner.FEED -> LinearLayout.LayoutParams(dp(132), dp(165))
+                        FormatoBanner.QUADRADO -> LinearLayout.LayoutParams(dp(150), dp(150))
                     }.apply { marginEnd = dp(10) }
                     setOnClickListener {
                         estiloSel = estilo
@@ -358,7 +368,7 @@ class GeradorBannerActivity : AppCompatActivity() {
         binding.ivPreviewBanner.setImageBitmap(banner)
         binding.ivPreviewBanner.visibility = View.VISIBLE
         binding.layoutBotoesFinais.visibility = View.VISIBLE
-        Toast.makeText(this, "Banner gerado! Toque em Salvar ou Compartilhar.", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "Banner gerado", Toast.LENGTH_SHORT).show()
 
         binding.ivPreviewBanner.post {
             binding.scrollPrincipal.smoothScrollTo(0, binding.ivPreviewBanner.top - dp(8))
@@ -406,25 +416,49 @@ class GeradorBannerActivity : AppCompatActivity() {
         }
     }
 
-    private fun compartilhar() {
+    // Grava o banner num arquivo temporário e devolve o Uri dele (ou null se falhar).
+    private suspend fun gravarBannerTemporario(banner: Bitmap): Uri? = withContext(Dispatchers.IO) {
+        try {
+            val pastaCache = File(cacheDir, "banners").apply { mkdirs() }
+            val arquivo = File(pastaCache, "banner_compartilhar.jpg")
+            FileOutputStream(arquivo).use { out ->
+                banner.compress(Bitmap.CompressFormat.JPEG, 95, out)
+            }
+            FileProvider.getUriForFile(this@GeradorBannerActivity, "$packageName.fileprovider", arquivo)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    // Devolve o banner pra tela de Transmissão: ele já aparece anexado lá, e
+    // é só escolher os clientes e enviar (o envio passa pelo servidor).
+    private fun enviarParaTransmissao() {
         val banner = bannerGerado ?: return
 
         lifecycleScope.launch {
-            val uri = withContext(Dispatchers.IO) {
-                try {
-                    val pastaCache = File(cacheDir, "banners").apply { mkdirs() }
-                    val arquivo = File(pastaCache, "banner_compartilhar.jpg")
-                    FileOutputStream(arquivo).use { out ->
-                        banner.compress(Bitmap.CompressFormat.JPEG, 95, out)
-                    }
-                    FileProvider.getUriForFile(this@GeradorBannerActivity, "$packageName.fileprovider", arquivo)
-                } catch (e: Exception) {
-                    null
-                }
-            }
-
+            val uri = gravarBannerTemporario(banner)
             if (uri == null) {
-                Toast.makeText(this@GeradorBannerActivity, "Não foi possível preparar o banner pra compartilhar.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@GeradorBannerActivity, "Não foi possível preparar o banner.", Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            val resultado = Intent().apply {
+                data = uri
+                clipData = ClipData.newRawUri("banner", uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            setResult(RESULT_OK, resultado)
+            finish()
+        }
+    }
+
+    // Compartilhamento normal pra outro app (WhatsApp, Instagram, Bluetooth...).
+    private fun compartilharExterno() {
+        val banner = bannerGerado ?: return
+
+        lifecycleScope.launch {
+            val uri = gravarBannerTemporario(banner)
+            if (uri == null) {
+                Toast.makeText(this@GeradorBannerActivity, "Não foi possível preparar o banner.", Toast.LENGTH_SHORT).show()
                 return@launch
             }
 
