@@ -88,55 +88,17 @@ class VerificacaoVencimentoWorker(
 
                     val dias = r.diasRestantes
                     if (dias != null) {
-                        // ✅ ALTERADO: "dias in 0..3" (era "1..3") - agora
-                        // manda mensagem também no dia exato do vencimento
-                        // ("vence hoje"), não só nos 3 dias anteriores. O
-                        // "dias < 0" continua cobrindo tanto o vencido com
-                        // data exata quanto o vencido sem data (sentinela
-                        // -1, quando o servidor Xtream não retorna mais os
-                        // dados da conta) - nenhuma mudança nesse caso.
-                        //
-                        // forcarEnvio (botão "Enviar avisos agora") pula a
-                        // checagem de horário, mas mantém a checagem de
-                        // "já avisado hoje" - não manda duas vezes se o
-                        // ciclo automático já tiver mandado com sucesso.
-                        val precisaAvisar = (dias in 0..3 || dias < 0) &&
-                            atualizado.ultimoAvisoDias != dias &&
-                            (forcarEnvio || estaNoHorarioDeAviso())
-                        if (precisaAvisar) {
-                            val mensagem = AppConfig.montarMensagemPara(applicationContext, dias, cliente.nome)
-                            if (mensagem != null) {
-                                // ✅ CORRIGIDO: bug real - antes o resultado do
-                                // envio não era conferido, então se o envio
-                                // pro backend falhasse (rede, bot reconectando
-                                // etc.) o app marcava "já avisado" do mesmo
-                                // jeito e NUNCA mais tentava reenviar pra esse
-                                // cliente/dia - a notificação local aparecia
-                                // (ela dispara antes, sem depender do envio),
-                                // mas a mensagem de WhatsApp nunca saía de
-                                // verdade. Agora só grava ultimoAvisoDias
-                                // quando o backend confirma o recebimento; se
-                                // falhar, tenta de novo na próxima execução
-                                // (1h depois) ou quando o usuário forçar.
-                                val resultado = BackendApi.enviarMensagem(applicationContext, cliente.whatsapp, mensagem)
-                                if (resultado is EnvioResultado.Ok) {
-                                    NotificationHelper.notificarVencimento(applicationContext, cliente.id, cliente.nome, dias)
-                                    dao.atualizar(atualizado.copy(ultimoAvisoDias = dias))
-                                } else if (resultado is EnvioResultado.Falha) {
-                                    dao.atualizar(atualizado.copy(
-                                        ultimoErro = "Falha ao enviar aviso de vencimento: ${resultado.motivo}"
-                                    ))
-                                }
-                            }
-                        }
+                        enviarAvisoSeNecessario(atualizado, dias, dao, forcarEnvio)
                     }
                 }
                 is BuscaClienteResultado.CredenciaisInvalidas -> {
-                    dao.atualizar(cliente.copy(
+                    val comErro = cliente.copy(
                         diasRestantes = cliente.diasRestantes ?: DIAS_SENTINELA_VENCIDO_SEM_DATA,
                         ultimaChecagemEm = System.currentTimeMillis(),
                         ultimoErro = "Usuário/senha não encontrados em nenhum servidor"
-                    ))
+                    )
+                    dao.atualizar(comErro)
+                    if (forcarEnvio) avisarComDadosSalvos(comErro, dao)
                 }
                 is BuscaClienteResultado.Erro -> {
                     // Na prática, "não encontrado em NENHUM servidor" quase
@@ -148,23 +110,82 @@ class VerificacaoVencimentoWorker(
                     // conhecida desse cliente, marca como Vencido (sem
                     // data exata) em vez de deixar preso em "Erro". Se já
                     // tínhamos uma data de antes, mantém ela como está.
-                    dao.atualizar(cliente.copy(
+                    val comErro = cliente.copy(
                         diasRestantes = cliente.diasRestantes ?: DIAS_SENTINELA_VENCIDO_SEM_DATA,
                         ultimaChecagemEm = System.currentTimeMillis(),
                         ultimoErro = resultado.mensagem
-                    ))
+                    )
+                    dao.atualizar(comErro)
+                    if (forcarEnvio) avisarComDadosSalvos(comErro, dao)
                 }
             }
         } catch (e: Exception) {
             try {
-                dao.atualizar(cliente.copy(
+                val comErro = cliente.copy(
                     ultimaChecagemEm = System.currentTimeMillis(),
                     ultimoErro = "${e.javaClass.simpleName}: ${e.message ?: "erro desconhecido ao sincronizar"}"
-                ))
+                )
+                dao.atualizar(comErro)
+                if (forcarEnvio) avisarComDadosSalvos(comErro, dao)
             } catch (e2: Exception) {
                 // Se nem isso conseguir gravar, aí sim desiste desse cliente.
             }
         }
+    }
+
+    // Regra de aviso (mesma de antes, agora num lugar só): 0..3 dias ou
+    // vencido, ainda não avisado nesse valor de dias, e dentro da janela
+    // 9h-11h (ou forcarEnvio = botão manual). Só marca "avisado" quando o
+    // backend da VPS confirma o recebimento.
+    private suspend fun enviarAvisoSeNecessario(
+        base: ClienteEntity,
+        dias: Int,
+        dao: ClienteDao,
+        forcarEnvio: Boolean
+    ) {
+        val precisaAvisar = (dias in 0..3 || dias < 0) &&
+            base.ultimoAvisoDias != dias &&
+            (forcarEnvio || estaNoHorarioDeAviso())
+        if (!precisaAvisar) return
+
+        val mensagem = AppConfig.montarMensagemPara(applicationContext, dias, base.nome) ?: return
+        val resultado = BackendApi.enviarMensagem(applicationContext, base.whatsapp, mensagem)
+        if (resultado is EnvioResultado.Ok) {
+            NotificationHelper.notificarVencimento(applicationContext, base.id, base.nome, dias)
+            dao.atualizar(base.copy(diasRestantes = dias, ultimoAvisoDias = dias))
+        } else if (resultado is EnvioResultado.Falha) {
+            dao.atualizar(base.copy(
+                ultimoErro = "Falha ao enviar aviso de vencimento: ${resultado.motivo}"
+            ))
+        }
+    }
+
+    // ✅ NOVO: usado SÓ no botão manual "Enviar avisos agora". Se a consulta
+    // aos servidores Xtream falhou (servidor fora, conta desativada etc.),
+    // usa a última data de vencimento que já está salva no app, recalcula
+    // os dias restantes de hoje e manda mesmo assim - a mensagem só depende
+    // da VPS/WhatsApp, não da consulta ao painel. Clientes que nunca tiveram
+    // uma data de vencimento sincronizada são ignorados (não há dado).
+    private suspend fun avisarComDadosSalvos(cliente: ClienteEntity, dao: ClienteDao) {
+        val expUnix = cliente.expDateUnix ?: return
+        val dias = diasAteVencimento(expUnix)
+        enviarAvisoSeNecessario(cliente, dias, dao, forcarEnvio = true)
+    }
+
+    private fun diasAteVencimento(expDateUnix: Long): Int {
+        val inicioHoje = inicioDoDia(System.currentTimeMillis())
+        val inicioVencimento = inicioDoDia(expDateUnix * 1000L)
+        return ((inicioVencimento - inicioHoje) / TimeUnit.DAYS.toMillis(1)).toInt()
+    }
+
+    private fun inicioDoDia(epochMillis: Long): Long {
+        val cal = Calendar.getInstance()
+        cal.timeInMillis = epochMillis
+        cal.set(Calendar.HOUR_OF_DAY, 0)
+        cal.set(Calendar.MINUTE, 0)
+        cal.set(Calendar.SECOND, 0)
+        cal.set(Calendar.MILLISECOND, 0)
+        return cal.timeInMillis
     }
 
     companion object {
