@@ -23,6 +23,10 @@ class ConfiguracaoMensagensActivity : AppCompatActivity() {
         binding.etMsgHoje.setText(AppConfig.getMensagemHoje(this))
         binding.etMsgVencido.setText(AppConfig.getMensagemVencido(this))
         binding.etChavePix.setText(AppConfig.getChavePix(this))
+        binding.switchLembretesVencimento.isChecked = AppConfig.isLembretesVencimentoAtivos(this)
+        binding.switchLembretesVencimento.setOnCheckedChangeListener { _, ativo ->
+            AppConfig.salvarLembretesVencimentoAtivos(this, ativo)
+        }
 
         binding.btnConfigBackend.setOnClickListener {
             startActivity(Intent(this, ConfiguracaoBackendActivity::class.java))

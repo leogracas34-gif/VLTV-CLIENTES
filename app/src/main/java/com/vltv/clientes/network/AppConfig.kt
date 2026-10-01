@@ -20,6 +20,8 @@ object AppConfig {
     private const val KEY_MSG_VENCIDO = "msg_vencido"
     private const val KEY_MSG_RENOVACAO = "msg_renovacao"
 
+    private const val KEY_LEMBRETES_VENCIMENTO_ATIVOS = "lembretes_vencimento_ativos"
+
     const val PADRAO_MSG_3_DIAS = "Olá, {nome}! 👋\n\nSeu plano vence em 3 dias. Para não perder o acesso, renove com antecedência.\n\n💳 Chave Pix para pagamento: {pix}\n\nQualquer dúvida, estou à disposição!"
     const val PADRAO_MSG_2_DIAS = "Olá, {nome}!\n\nFaltam apenas 2 dias para o vencimento do seu plano. Já pensou em renovar?\n\n💳 Chave Pix para pagamento: {pix}"
     const val PADRAO_MSG_1_DIA = "Olá, {nome}! ⚠️\n\nSeu plano vence amanhã! Renove agora mesmo para continuar sem interrupção.\n\n💳 Chave Pix para pagamento: {pix}"
@@ -78,6 +80,21 @@ object AppConfig {
 
     fun salvarMensagemRenovacao(context: Context, mensagem: String) {
         prefs(context).edit().putString(KEY_MSG_RENOVACAO, mensagem).apply()
+    }
+
+    // Liga/desliga só os LEMBRETES automáticos de vencimento (3/2/1 dia,
+    // vence hoje, vencido) - tanto o ciclo automático quanto o botão
+    // "Enviar avisos agora" respeitam isso (enviarAvisoSeNecessario, no
+    // Worker). Útil quando o painel deu problema ou o cliente ganhou uns
+    // dias a mais "por fora": desliga aqui pra não mandar aviso de
+    // vencimento errado enquanto isso, sem precisar desligar o app inteiro.
+    // Não afeta a Transmissão (o texto ali é sempre o que você escrever na
+    // hora) nem a sincronização dos dados do cliente (continua normal).
+    fun isLembretesVencimentoAtivos(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_LEMBRETES_VENCIMENTO_ATIVOS, true)
+
+    fun salvarLembretesVencimentoAtivos(context: Context, ativo: Boolean) {
+        prefs(context).edit().putBoolean(KEY_LEMBRETES_VENCIMENTO_ATIVOS, ativo).apply()
     }
 
     // Monta a mensagem certa pro número de dias restantes, substituindo

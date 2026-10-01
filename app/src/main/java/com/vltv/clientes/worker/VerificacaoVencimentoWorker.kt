@@ -143,7 +143,13 @@ class VerificacaoVencimentoWorker(
         dao: ClienteDao,
         forcarEnvio: Boolean
     ) {
-        val precisaAvisar = (dias in 0..3 || dias < 0) &&
+        // ✅ NOVO: liga-desliga dos lembretes de vencimento (Configurações).
+        // Quando desligado, a checagem/atualização dos dados do cliente
+        // (chamador desta função) continua normal - só o envio do aviso de
+        // "vencendo em X dias" é pulado, tanto no ciclo automático quanto no
+        // botão "Enviar avisos agora".
+        val precisaAvisar = AppConfig.isLembretesVencimentoAtivos(applicationContext) &&
+            (dias in 0..3 || dias < 0) &&
             base.ultimoAvisoDias != dias &&
             (forcarEnvio || estaNoHorarioDeAviso())
         if (!precisaAvisar) return
