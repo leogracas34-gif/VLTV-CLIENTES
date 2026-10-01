@@ -5,11 +5,9 @@ import android.content.ContentValues
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
@@ -29,7 +27,6 @@ import androidx.core.content.FileProvider
 import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
-import com.vltv.clientes.data.PlanoCliente
 import com.vltv.clientes.databinding.ActivityGeradorBannerBinding
 import com.vltv.clientes.network.BackendApi
 import com.vltv.clientes.network.BuscaTmdbResultado
@@ -37,9 +34,7 @@ import com.vltv.clientes.network.TmdbResultado
 import com.vltv.clientes.ui.BannerComposer
 import com.vltv.clientes.ui.CategoriaBanner
 import com.vltv.clientes.ui.EstiloFilme
-import com.vltv.clientes.ui.EstiloPreco
 import com.vltv.clientes.ui.FormatoBanner
-import com.vltv.clientes.ui.PaletaBanner
 import com.vltv.clientes.ui.TmdbResultadoAdapter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -52,43 +47,26 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-// Tela do Gerador de Banner. Dois fluxos:
-//  1) Filme ou Série: busca o pôster no TMDB, escolhe o selo e o modelo
-//     (Cinema / Cartaz / Neon) e gera o banner.
-//  2) Preços dos Planos: escolhe o plano (Mensal, Trimestral, Semestral,
-//     Anual ou Indique e Ganhe), o valor, o modelo e a cor, e gera o banner.
-// Em ambos, os modelos aparecem como miniaturas ao vivo, e o banner final
-// é desenhado direto no Canvas (sem depender de internet nem do Canva).
+// Tela do Gerador de Banner de filme/série: busca o pôster no TMDB, escolhe
+// o selo, o formato (Story ou Feed) e o modelo (Cinema, Cartaz, Neon ou
+// Dourado) olhando as miniaturas ao vivo, e gera o banner. Tudo é desenhado
+// direto no Canvas, sem depender de internet nem de app externo.
 class GeradorBannerActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityGeradorBannerBinding
     private lateinit var adapterResultados: TmdbResultadoAdapter
 
-    // Filme / série
     private var categoriaSelecionada = CategoriaBanner.DESTAQUE_SEMANA
-    private var estiloFilmeSel = EstiloFilme.CINEMA
+    private var estiloSel = EstiloFilme.CINEMA
+    private var formatoSel = FormatoBanner.STORY
+
+    private var itemAtual: TmdbResultado? = null
     private var posterAtual: Bitmap? = null
-    private var jobMiniaturasFilme: Job? = null
-    private val miniaturasFilme = mutableListOf<View>()
-
-    // Preços / indicação (planoSel == null significa "Indique e Ganhe")
-    private var planoSel: PlanoCliente? = PlanoCliente.MENSAL
-    private var estiloPrecoSel = EstiloPreco.PREMIUM
-    private var paletaSel = PaletaBanner.DOURADO
-    private var formatoSel = FormatoBanner.PAISAGEM
-    private var fotoIndicacao: Bitmap? = null
-    private val chipsFormato = mutableListOf<Pair<TextView, FormatoBanner>>()
-    private var precosInicializado = false
-    private var jobMiniaturasPreco: Job? = null
-    private val chipsPlano = mutableListOf<Pair<TextView, PlanoCliente?>>()
-    private val bolasCor = mutableListOf<Pair<View, PaletaBanner>>()
-    private val miniaturasPreco = mutableListOf<Pair<View, EstiloPreco>>()
-
     private var bannerGerado: Bitmap? = null
 
-    private val escolherFoto = registerForActivityResult(
-        ActivityResultContracts.GetContent()
-    ) { uri -> if (uri != null) carregarFoto(uri) }
+    private var jobMiniaturas: Job? = null
+    private val miniaturas = mutableListOf<Pair<View, EstiloFilme>>()
+    private val chipsFormato = mutableListOf<Pair<TextView, FormatoBanner>>()
 
     private val solicitarPermissaoStorage = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -104,6 +82,7 @@ class GeradorBannerActivity : AppCompatActivity() {
         binding.btnVoltar.setOnClickListener { finish() }
 
         configurarChipsDeCategoria()
+        montarChipsFormato()
 
         adapterResultados = TmdbResultadoAdapter(lifecycleScope) { resultado -> escolherResultado(resultado) }
         binding.rvResultados.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
@@ -119,332 +98,19 @@ class GeradorBannerActivity : AppCompatActivity() {
             }
         }
 
-        // Mudou sinopse ou frase -> atualiza as miniaturas dos modelos
-        binding.etSinopse.doAfterTextChanged { agendarMiniaturasFilme() }
-        binding.etFrase.doAfterTextChanged { agendarMiniaturasFilme() }
-
-        // Mudou valor ou frase do plano -> atualiza as miniaturas
-        binding.etValorPreco.doAfterTextChanged { agendarMiniaturasPreco() }
-        binding.etTextoExtra.doAfterTextChanged { agendarMiniaturasPreco() }
-        binding.etQtdAmigos.doAfterTextChanged { agendarMiniaturasPreco() }
-
-        binding.btnEscolherFoto.setOnClickListener { escolherFoto.launch("image/*") }
-        binding.btnRemoverFoto.setOnClickListener {
-            fotoIndicacao = null
-            binding.btnRemoverFoto.visibility = View.GONE
-            binding.btnEscolherFoto.text = "Escolher foto da galeria"
-            agendarMiniaturasPreco()
-        }
+        // Mexeu em qualquer texto -> atualiza as miniaturas dos modelos
+        binding.etTitulo.doAfterTextChanged { agendarMiniaturas() }
+        binding.etSinopse.doAfterTextChanged { agendarMiniaturas() }
+        binding.etFrase.doAfterTextChanged { agendarMiniaturas() }
 
         binding.btnGerarBanner.setOnClickListener { gerarBanner() }
-        binding.btnGerarBannerPrecos.setOnClickListener { gerarBannerDePrecos() }
         binding.btnSalvar.setOnClickListener { pedirPermissaoESalvar() }
         binding.btnCompartilhar.setOnClickListener { compartilhar() }
-
-        binding.chipModoFilme.setOnClickListener { selecionarModo(modoFilme = true) }
-        binding.chipModoPrecos.setOnClickListener { selecionarModo(modoFilme = false) }
     }
 
     private fun dp(valor: Int): Int = (valor * resources.displayMetrics.density).toInt()
 
-    // ───────────────────────── Modo (Filme x Preços) ─────────────────────
-
-    private fun selecionarModo(modoFilme: Boolean) {
-        binding.containerModoFilme.visibility = if (modoFilme) View.VISIBLE else View.GONE
-        binding.containerModoPrecos.visibility = if (modoFilme) View.GONE else View.VISIBLE
-
-        binding.chipModoFilme.setBackgroundResource(if (modoFilme) R.drawable.bg_chip_selecionado else R.drawable.bg_chip_normal)
-        binding.chipModoPrecos.setBackgroundResource(if (modoFilme) R.drawable.bg_chip_normal else R.drawable.bg_chip_selecionado)
-
-        bannerGerado = null
-        binding.ivPreviewBanner.visibility = View.GONE
-        binding.layoutBotoesFinais.visibility = View.GONE
-
-        if (!modoFilme && !precosInicializado) {
-            precosInicializado = true
-            montarChipsPlanos()
-            montarBolasDeCor()
-            montarChipsFormato()
-            selecionarPlano(PlanoCliente.MENSAL)
-        }
-    }
-
-    // ───────────────────────── Preços dos planos / Indique e Ganhe ───────
-
-    private fun nomeCurto(plano: PlanoCliente): String = when (plano) {
-        PlanoCliente.MENSAL -> "Mensal"
-        PlanoCliente.TRIMESTRAL -> "Trimestral"
-        PlanoCliente.SEMESTRAL -> "Semestral"
-        PlanoCliente.ANUAL -> "Anual"
-    }
-
-    private fun formatarValor(valor: Double): String =
-        String.format(Locale("pt", "BR"), "%.2f", valor)
-
-    private fun montarChipsPlanos() {
-        binding.linhaPlanos.removeAllViews()
-        chipsPlano.clear()
-
-        val itens: List<PlanoCliente?> = PlanoCliente.values().toList() + listOf<PlanoCliente?>(null)
-        itens.forEach { plano ->
-            val texto = if (plano != null) {
-                "${nomeCurto(plano)}\nR$ ${formatarValor(plano.valorPadrao)}"
-            } else {
-                "Indique\ne Ganhe"
-            }
-            val chip = TextView(this).apply {
-                text = texto
-                setTextColor(Color.WHITE)
-                textSize = 12.5f
-                setTypeface(typeface, Typeface.BOLD)
-                gravity = Gravity.CENTER
-                setPadding(dp(18), dp(10), dp(18), dp(10))
-                layoutParams = LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT
-                ).apply { marginEnd = dp(8) }
-                setOnClickListener { selecionarPlano(plano) }
-            }
-            binding.linhaPlanos.addView(chip)
-            chipsPlano.add(Pair(chip, plano))
-        }
-    }
-
-    private fun montarBolasDeCor() {
-        binding.linhaCores.removeAllViews()
-        bolasCor.clear()
-
-        PaletaBanner.values().forEach { paleta ->
-            val bola = View(this).apply {
-                layoutParams = LinearLayout.LayoutParams(dp(40), dp(40)).apply { marginEnd = dp(12) }
-                setOnClickListener {
-                    paletaSel = paleta
-                    atualizarVisualCores()
-                    agendarMiniaturasPreco()
-                }
-            }
-            binding.linhaCores.addView(bola)
-            bolasCor.add(Pair(bola, paleta))
-        }
-        atualizarVisualCores()
-    }
-
-    private fun montarChipsFormato() {
-        binding.linhaFormatos.removeAllViews()
-        chipsFormato.clear()
-
-        FormatoBanner.values().forEach { formato ->
-            val chip = TextView(this).apply {
-                text = formato.rotulo
-                setTextColor(Color.WHITE)
-                textSize = 12.5f
-                setTypeface(typeface, Typeface.BOLD)
-                gravity = Gravity.CENTER
-                setPadding(dp(18), dp(10), dp(18), dp(10))
-                layoutParams = LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT
-                ).apply { marginEnd = dp(8) }
-                setOnClickListener {
-                    formatoSel = formato
-                    atualizarVisualFormatos()
-                    agendarMiniaturasPreco()
-                }
-            }
-            binding.linhaFormatos.addView(chip)
-            chipsFormato.add(Pair(chip, formato))
-        }
-        atualizarVisualFormatos()
-    }
-
-    private fun atualizarVisualFormatos() {
-        chipsFormato.forEach { (chip, formato) ->
-            chip.setBackgroundResource(if (formato == formatoSel) R.drawable.bg_chip_selecionado else R.drawable.bg_chip_normal)
-        }
-    }
-
-    private fun carregarFoto(uri: Uri) {
-        lifecycleScope.launch {
-            val foto = withContext(Dispatchers.IO) {
-                try {
-                    val limites = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                    contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, limites) }
-                    var amostra = 1
-                    while (limites.outWidth / amostra > 1600 || limites.outHeight / amostra > 1600) amostra *= 2
-                    val opcoes = BitmapFactory.Options().apply { inSampleSize = amostra }
-                    contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, opcoes) }
-                } catch (e: Throwable) {
-                    null
-                }
-            }
-            if (foto == null) {
-                Toast.makeText(this@GeradorBannerActivity, "Não consegui abrir essa foto.", Toast.LENGTH_SHORT).show()
-                return@launch
-            }
-            fotoIndicacao = foto
-            binding.btnEscolherFoto.text = "Trocar foto"
-            binding.btnRemoverFoto.visibility = View.VISIBLE
-            // A foto só aparece no modelo Festa - já seleciona ele pra você ver
-            estiloPrecoSel = EstiloPreco.FESTA
-            agendarMiniaturasPreco()
-        }
-    }
-
-    private fun atualizarVisualCores() {
-        bolasCor.forEach { (view, paleta) ->
-            val fundo = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(paleta.base)
-                if (paleta == paletaSel) setStroke(dp(3), Color.WHITE) else setStroke(dp(1), 0x55FFFFFF)
-            }
-            view.background = fundo
-        }
-    }
-
-    private fun atualizarVisualPlanos() {
-        chipsPlano.forEach { (chip, plano) ->
-            chip.setBackgroundResource(if (plano == planoSel) R.drawable.bg_chip_selecionado else R.drawable.bg_chip_normal)
-        }
-    }
-
-    private fun selecionarPlano(plano: PlanoCliente?) {
-        planoSel = plano
-        atualizarVisualPlanos()
-
-        binding.blocoQtd.visibility = if (plano == null) View.VISIBLE else View.GONE
-        binding.blocoFoto.visibility = if (plano == null) View.VISIBLE else View.GONE
-
-        if (plano != null) {
-            if (estiloPrecoSel == EstiloPreco.FESTA) estiloPrecoSel = EstiloPreco.PREMIUM
-            binding.blocoValor.visibility = View.VISIBLE
-            binding.tvLabelExtra.text = "Frase personalizada (opcional)"
-            binding.etTextoExtra.hint = "Ex: Aproveite 3 meses de conteúdo incrível!"
-            binding.etValorPreco.setText(formatarValor(plano.valorPadrao))
-        } else {
-            binding.blocoValor.visibility = View.GONE
-            binding.tvLabelExtra.text = "Observação (opcional)"
-            binding.etTextoExtra.hint = BannerComposer.NOTA_INDICACAO_PADRAO
-            // Na indicação não existe o modelo "Todos os planos"
-            if (estiloPrecoSel == EstiloPreco.TABELA) estiloPrecoSel = EstiloPreco.FESTA
-        }
-        binding.etTextoExtra.setText("")
-        agendarMiniaturasPreco()
-    }
-
-    private fun estilosDisponiveis(): List<EstiloPreco> =
-        if (planoSel == null) {
-            listOf(EstiloPreco.FESTA, EstiloPreco.PREMIUM, EstiloPreco.VIDRO, EstiloPreco.CIRCULO)
-        } else {
-            EstiloPreco.values().toList().filter { it != EstiloPreco.FESTA }
-        }
-
-    private fun valorDigitado(plano: PlanoCliente): Double =
-        binding.etValorPreco.text.toString().trim().replace(',', '.').toDoubleOrNull() ?: plano.valorPadrao
-
-    // Foto do que está escolhido na tela agora (lida na thread principal,
-    // pra poder desenhar o banner em segundo plano sem mexer em View).
-    private class ParamsPreco(
-        val plano: PlanoCliente?,
-        val valor: Double,
-        val estilo: EstiloPreco,
-        val paleta: PaletaBanner,
-        val texto: String,
-        val qtdAmigos: Int,
-        val foto: Bitmap?,
-        val formato: FormatoBanner
-    )
-
-    private fun lerParamsPreco(): ParamsPreco {
-        val plano = planoSel
-        val valor = if (plano != null) valorDigitado(plano) else 0.0
-        val qtd = binding.etQtdAmigos.text.toString().trim().toIntOrNull() ?: 1
-        return ParamsPreco(
-            plano, valor, estiloPrecoSel, paletaSel,
-            binding.etTextoExtra.text.toString(), qtd, fotoIndicacao, formatoSel
-        )
-    }
-
-    private fun desenharPreco(params: ParamsPreco, estilo: EstiloPreco, escala: Float): Bitmap =
-        if (params.plano == null) {
-            BannerComposer.comporIndicacao(this, estilo, params.paleta, params.qtdAmigos, params.texto, params.foto, params.formato, escala)
-        } else {
-            BannerComposer.comporPlano(this, params.plano, params.valor, estilo, params.paleta, params.texto, params.formato, escala)
-        }
-
-    private fun agendarMiniaturasPreco() {
-        if (!precosInicializado) return
-        jobMiniaturasPreco?.cancel()
-
-        val params = lerParamsPreco()
-        val estilos = estilosDisponiveis()
-
-        jobMiniaturasPreco = lifecycleScope.launch {
-            delay(250)
-            val bitmaps = try {
-                withContext(Dispatchers.Default) { estilos.map { desenharPreco(params, it, 0.25f) } }
-            } catch (e: Throwable) {
-                null
-            } ?: return@launch
-
-            binding.galeriaModelosPreco.removeAllViews()
-            miniaturasPreco.clear()
-
-            estilos.forEachIndexed { i, estilo ->
-                val img = ImageView(this@GeradorBannerActivity).apply {
-                    setImageBitmap(bitmaps[i])
-                    scaleType = ImageView.ScaleType.FIT_CENTER
-                    setPadding(dp(3), dp(3), dp(3), dp(3))
-                    layoutParams = when (params.formato) {
-                        FormatoBanner.PAISAGEM -> LinearLayout.LayoutParams(dp(230), dp(134))
-                        FormatoBanner.QUADRADO -> LinearLayout.LayoutParams(dp(150), dp(150))
-                        FormatoBanner.STORY -> LinearLayout.LayoutParams(dp(95), dp(168))
-                    }.apply { marginEnd = dp(10) }
-                    setOnClickListener {
-                        estiloPrecoSel = estilo
-                        atualizarBordasMiniaturasPreco()
-                    }
-                }
-                binding.galeriaModelosPreco.addView(img)
-                miniaturasPreco.add(Pair(img, estilo))
-            }
-            atualizarBordasMiniaturasPreco()
-        }
-    }
-
-    private fun atualizarBordasMiniaturasPreco() {
-        miniaturasPreco.forEach { (view, estilo) ->
-            view.setBackgroundResource(if (estilo == estiloPrecoSel) R.drawable.bg_card_selecionado else R.drawable.bg_card)
-        }
-    }
-
-    private fun gerarBannerDePrecos() {
-        val params = lerParamsPreco()
-        if (params.plano != null && params.valor <= 0.0) {
-            Toast.makeText(this, "Digite um valor válido.", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        binding.btnGerarBannerPrecos.text = "Gerando..."
-        binding.btnGerarBannerPrecos.isEnabled = false
-
-        lifecycleScope.launch {
-            val banner = try {
-                withContext(Dispatchers.Default) { desenharPreco(params, params.estilo, 1f) }
-            } catch (e: Throwable) {
-                null
-            }
-            binding.btnGerarBannerPrecos.text = "Gerar banner"
-            binding.btnGerarBannerPrecos.isEnabled = true
-
-            if (banner == null) {
-                Toast.makeText(this@GeradorBannerActivity, "Não foi possível gerar o banner. Tenta de novo.", Toast.LENGTH_SHORT).show()
-                return@launch
-            }
-            mostrarBanner(banner)
-        }
-    }
-
-    // ───────────────────────── Filme / série ─────────────────────────────
+    // ───────────────────────── Selo e formato ────────────────────────────
 
     private fun configurarChipsDeCategoria() {
         val chips = mapOf(
@@ -457,7 +123,7 @@ class GeradorBannerActivity : AppCompatActivity() {
             chip.setOnClickListener {
                 categoriaSelecionada = categoria
                 atualizarVisualChips(chips)
-                agendarMiniaturasFilme()
+                agendarMiniaturas()
             }
         }
         atualizarVisualChips(chips)
@@ -476,6 +142,42 @@ class GeradorBannerActivity : AppCompatActivity() {
             }
         }
     }
+
+    private fun montarChipsFormato() {
+        binding.linhaFormatosFilme.removeAllViews()
+        chipsFormato.clear()
+
+        FormatoBanner.values().forEach { formato ->
+            val chip = TextView(this).apply {
+                text = formato.rotulo
+                setTextColor(Color.WHITE)
+                textSize = 12.5f
+                setTypeface(typeface, Typeface.BOLD)
+                gravity = Gravity.CENTER
+                setPadding(dp(20), dp(10), dp(20), dp(10))
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply { marginEnd = dp(8) }
+                setOnClickListener {
+                    formatoSel = formato
+                    atualizarVisualFormatos()
+                    agendarMiniaturas()
+                }
+            }
+            binding.linhaFormatosFilme.addView(chip)
+            chipsFormato.add(Pair(chip, formato))
+        }
+        atualizarVisualFormatos()
+    }
+
+    private fun atualizarVisualFormatos() {
+        chipsFormato.forEach { (chip, formato) ->
+            chip.setBackgroundResource(if (formato == formatoSel) R.drawable.bg_chip_selecionado else R.drawable.bg_chip_normal)
+        }
+    }
+
+    // ───────────────────────── Busca no TMDB ─────────────────────────────
 
     private fun buscar() {
         val termo = binding.etBusca.text.toString().trim()
@@ -521,89 +223,121 @@ class GeradorBannerActivity : AppCompatActivity() {
                 return@launch
             }
 
+            itemAtual = item
             posterAtual = poster
+            binding.etTitulo.setText(item.titulo)
             binding.etSinopse.setText(item.sinopse)
+
+            binding.tvLabelTitulo.visibility = View.VISIBLE
+            binding.etTitulo.visibility = View.VISIBLE
             binding.tvLabelSinopse.visibility = View.VISIBLE
             binding.etSinopse.visibility = View.VISIBLE
             binding.tvLabelFrase.visibility = View.VISIBLE
             binding.etFrase.visibility = View.VISIBLE
+            binding.tvLabelFormato.visibility = View.VISIBLE
+            binding.linhaFormatosFilme.visibility = View.VISIBLE
             binding.tvLabelModeloFilme.visibility = View.VISIBLE
             binding.scrollModelosFilme.visibility = View.VISIBLE
             binding.btnGerarBanner.visibility = View.VISIBLE
 
-            agendarMiniaturasFilme()
+            agendarMiniaturas()
             Toast.makeText(this@GeradorBannerActivity, "Escolha o modelo e toque em Gerar Banner.", Toast.LENGTH_SHORT).show()
         }
     }
 
-    private fun agendarMiniaturasFilme() {
-        val poster = posterAtual ?: return
-        jobMiniaturasFilme?.cancel()
+    // ───────────────────────── Modelos (miniaturas ao vivo) ──────────────
 
-        val categoria = categoriaSelecionada
-        val sinopse = binding.etSinopse.text.toString()
-        val frase = binding.etFrase.text.toString()
+    private class Params(
+        val poster: Bitmap,
+        val categoria: CategoriaBanner,
+        val titulo: String,
+        val tipo: String,
+        val ano: String,
+        val sinopse: String,
+        val frase: String,
+        val formato: FormatoBanner
+    )
 
-        jobMiniaturasFilme = lifecycleScope.launch {
+    private fun lerParams(): Params? {
+        val poster = posterAtual ?: return null
+        val item = itemAtual ?: return null
+        return Params(
+            poster,
+            categoriaSelecionada,
+            binding.etTitulo.text.toString(),
+            item.tipo,
+            item.ano,
+            binding.etSinopse.text.toString(),
+            binding.etFrase.text.toString(),
+            formatoSel
+        )
+    }
+
+    private fun desenhar(params: Params, estilo: EstiloFilme, escala: Float): Bitmap =
+        BannerComposer.compor(
+            this, params.poster, params.categoria, params.titulo, params.tipo, params.ano,
+            params.sinopse, params.frase, estilo, params.formato, escala
+        )
+
+    private fun agendarMiniaturas() {
+        val params = lerParams() ?: return
+        jobMiniaturas?.cancel()
+
+        jobMiniaturas = lifecycleScope.launch {
             delay(250)
             val estilos = EstiloFilme.values().toList()
             val bitmaps = try {
-                withContext(Dispatchers.Default) {
-                    estilos.map { BannerComposer.compor(this@GeradorBannerActivity, poster, categoria, sinopse, frase, it, 0.25f) }
-                }
+                withContext(Dispatchers.Default) { estilos.map { desenhar(params, it, 0.2f) } }
             } catch (e: Throwable) {
                 null
             } ?: return@launch
 
             binding.galeriaModelosFilme.removeAllViews()
-            miniaturasFilme.clear()
+            miniaturas.clear()
 
             estilos.forEachIndexed { i, estilo ->
                 val img = ImageView(this@GeradorBannerActivity).apply {
                     setImageBitmap(bitmaps[i])
                     scaleType = ImageView.ScaleType.FIT_CENTER
                     setPadding(dp(3), dp(3), dp(3), dp(3))
-                    tag = estilo
-                    layoutParams = LinearLayout.LayoutParams(dp(130), dp(168)).apply { marginEnd = dp(10) }
+                    layoutParams = when (params.formato) {
+                        FormatoBanner.STORY -> LinearLayout.LayoutParams(dp(104), dp(184))
+                        FormatoBanner.FEED -> LinearLayout.LayoutParams(dp(132), dp(165))
+                    }.apply { marginEnd = dp(10) }
                     setOnClickListener {
-                        estiloFilmeSel = estilo
-                        atualizarBordasMiniaturasFilme()
+                        estiloSel = estilo
+                        atualizarBordasMiniaturas()
                     }
                 }
                 binding.galeriaModelosFilme.addView(img)
-                miniaturasFilme.add(img)
+                miniaturas.add(Pair(img, estilo))
             }
-            atualizarBordasMiniaturasFilme()
+            atualizarBordasMiniaturas()
         }
     }
 
-    private fun atualizarBordasMiniaturasFilme() {
-        miniaturasFilme.forEach { view ->
-            view.setBackgroundResource(if (view.tag == estiloFilmeSel) R.drawable.bg_card_selecionado else R.drawable.bg_card)
+    private fun atualizarBordasMiniaturas() {
+        miniaturas.forEach { (view, estilo) ->
+            view.setBackgroundResource(if (estilo == estiloSel) R.drawable.bg_card_selecionado else R.drawable.bg_card)
         }
     }
+
+    // ───────────────────────── Gerar, salvar e compartilhar ──────────────
 
     private fun gerarBanner() {
-        val poster = posterAtual
-
-        if (poster == null) {
+        val params = lerParams()
+        if (params == null) {
             Toast.makeText(this, "Escolha um filme ou série primeiro.", Toast.LENGTH_SHORT).show()
             return
         }
-
-        val sinopse = binding.etSinopse.text.toString()
-        val frase = binding.etFrase.text.toString()
-        val categoria = categoriaSelecionada
-        val estilo = estiloFilmeSel
+        val estilo = estiloSel
 
         binding.btnGerarBanner.text = "Gerando..."
         binding.btnGerarBanner.isEnabled = false
 
         lifecycleScope.launch {
             val banner = try {
-                withContext(Dispatchers.Default) {
-                    BannerComposer.compor(this@GeradorBannerActivity, poster, categoria, sinopse, frase, estilo, 1f)
-                }
+                withContext(Dispatchers.Default) { desenhar(params, estilo, 1f) }
             } catch (e: Throwable) {
                 null
             }
@@ -618,10 +352,7 @@ class GeradorBannerActivity : AppCompatActivity() {
         }
     }
 
-    // ───────────────────────── Preview, salvar e compartilhar ────────────
-
-    // Mostra o banner pronto e rola a tela até ele (antes ele aparecia lá
-    // embaixo, fora da tela, e parecia que o botão não tinha feito nada).
+    // Mostra o banner pronto e rola a tela até ele.
     private fun mostrarBanner(banner: Bitmap) {
         bannerGerado = banner
         binding.ivPreviewBanner.setImageBitmap(banner)
