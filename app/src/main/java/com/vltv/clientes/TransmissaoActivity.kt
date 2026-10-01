@@ -69,6 +69,15 @@ class TransmissaoActivity : AppCompatActivity() {
         if (uri != null) processarImagemEscolhida(uri)
     }
 
+    // Gerador de banner: quando você toca em "Transmitir" lá, o banner volta
+    // pra cá já anexado na mensagem.
+    private val gerarBannerLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { resultado ->
+        val uri = resultado.data?.data
+        if (resultado.resultCode == RESULT_OK && uri != null) processarImagemEscolhida(uri)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityTransmissaoBinding.inflate(layoutInflater)
@@ -89,7 +98,7 @@ class TransmissaoActivity : AppCompatActivity() {
         }
 
         binding.btnVoltar.setOnClickListener { finish() }
-        binding.btnGeradorBanner.setOnClickListener { startActivity(Intent(this, GeradorBannerActivity::class.java)) }
+        binding.btnGeradorBanner.setOnClickListener { gerarBannerLauncher.launch(Intent(this, GeradorBannerActivity::class.java)) }
 
         binding.btnEscolherImagem.setOnClickListener { escolherImagemLauncher.launch("image/*") }
         binding.btnRemoverImagem.setOnClickListener { removerImagem() }
