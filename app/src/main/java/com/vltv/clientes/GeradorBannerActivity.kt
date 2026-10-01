@@ -79,8 +79,39 @@ class GeradorBannerActivity : AppCompatActivity() {
         }
 
         binding.btnGerarBanner.setOnClickListener { gerarBanner() }
+        binding.btnGerarBannerPrecos.setOnClickListener { gerarBannerDePrecos() }
         binding.btnSalvar.setOnClickListener { pedirPermissaoESalvar() }
         binding.btnCompartilhar.setOnClickListener { compartilhar() }
+
+        binding.chipModoFilme.setOnClickListener { selecionarModo(modoFilme = true) }
+        binding.chipModoPrecos.setOnClickListener { selecionarModo(modoFilme = false) }
+    }
+
+    // Alterna entre o modo "Filme/Série" (busca no TMDB) e "Preços dos Planos"
+    // (banner fixo com os 4 planos cadastrados) - são fluxos independentes,
+    // só compartilham a área de preview e os botões de salvar/compartilhar.
+    private fun selecionarModo(modoFilme: Boolean) {
+        binding.containerModoFilme.visibility = if (modoFilme) View.VISIBLE else View.GONE
+        binding.containerModoPrecos.visibility = if (modoFilme) View.GONE else View.VISIBLE
+
+        binding.chipModoFilme.setBackgroundResource(if (modoFilme) R.drawable.bg_chip_selecionado else R.drawable.bg_chip_normal)
+        binding.chipModoPrecos.setBackgroundResource(if (modoFilme) R.drawable.bg_chip_normal else R.drawable.bg_chip_selecionado)
+
+        bannerGerado = null
+        binding.ivPreviewBanner.visibility = View.GONE
+        binding.layoutBotoesFinais.visibility = View.GONE
+    }
+
+    private fun gerarBannerDePrecos() {
+        lifecycleScope.launch {
+            val banner = withContext(Dispatchers.Default) {
+                BannerComposer.comporPrecos(this@GeradorBannerActivity)
+            }
+            bannerGerado = banner
+            binding.ivPreviewBanner.setImageBitmap(banner)
+            binding.ivPreviewBanner.visibility = View.VISIBLE
+            binding.layoutBotoesFinais.visibility = View.VISIBLE
+        }
     }
 
     private fun configurarChipsDeCategoria() {
