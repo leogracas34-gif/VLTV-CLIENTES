@@ -37,6 +37,7 @@
     </LinearLayout>
 
     <androidx.core.widget.NestedScrollView
+        android:id="@+id/scrollPrincipal"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
@@ -97,12 +98,219 @@
                 tools:visibility="visible">
 
                 <TextView
-                    android:layout_width="match_parent"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Gera um banner com os 4 planos e valores que você já cadastra no app (Mensal, Trimestral, Semestral e Anual)."
+                    android:text="Escolha o plano"
                     android:textColor="@color/cinza_texto"
                     android:textSize="13sp"
-                    android:layout_marginBottom="14dp" />
+                    android:textStyle="bold"
+                    android:layout_marginBottom="8dp" />
+
+                <HorizontalScrollView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:scrollbars="none"
+                    android:layout_marginBottom="16dp">
+
+                    <LinearLayout
+                        android:id="@+id/linhaPlanos"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal" />
+                </HorizontalScrollView>
+
+                <LinearLayout
+                    android:id="@+id/blocoValor"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Valor no banner (pode editar)"
+                    android:textColor="@color/cinza_texto"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="8dp" />
+
+                    <EditText
+                        android:id="@+id/etValorPreco"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_input"
+                        android:padding="14dp"
+                        android:textColor="@color/branco"
+                        android:textColorHint="@color/cinza_hint"
+                        android:textSize="14sp"
+                        android:hint="Ex: 40,00"
+                        android:inputType="text"
+                        android:digits="0123456789,."
+                        android:singleLine="true"
+                        android:layout_marginBottom="14dp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/blocoQtd"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Quantos amigos indicar para ganhar 1 mês?"
+                    android:textColor="@color/cinza_texto"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="8dp" />
+
+                    <EditText
+                        android:id="@+id/etQtdAmigos"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_input"
+                        android:padding="14dp"
+                        android:textColor="@color/branco"
+                        android:textColorHint="@color/cinza_hint"
+                        android:textSize="14sp"
+                        android:hint="1"
+                        android:text="1"
+                        android:inputType="number"
+                        android:maxLength="2"
+                        android:singleLine="true"
+                        android:layout_marginBottom="14dp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/blocoFoto"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Foto no modelo Festa (opcional - de preferência PNG sem fundo)"
+                    android:textColor="@color/cinza_texto"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="8dp" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginBottom="14dp">
+
+                        <TextView
+                            android:id="@+id/btnEscolherFoto"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:background="@drawable/bg_botao_secundario"
+                            android:gravity="center"
+                            android:padding="13dp"
+                            android:text="Escolher foto da galeria"
+                            android:textColor="@color/branco"
+                            android:textSize="13sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/btnRemoverFoto"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="8dp"
+                            android:background="@drawable/bg_botao_secundario"
+                            android:gravity="center"
+                            android:paddingStart="18dp"
+                            android:paddingEnd="18dp"
+                            android:paddingTop="13dp"
+                            android:paddingBottom="13dp"
+                            android:text="Remover"
+                            android:textColor="@color/branco"
+                            android:textSize="13sp"
+                            android:textStyle="bold"
+                            android:visibility="gone" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tvLabelExtra"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Frase personalizada (opcional)"
+                    android:textColor="@color/cinza_texto"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="8dp" />
+
+                <EditText
+                    android:id="@+id/etTextoExtra"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_input"
+                    android:padding="14dp"
+                    android:textColor="@color/branco"
+                    android:textColorHint="@color/cinza_hint"
+                    android:textSize="14sp"
+                    android:hint="Ex: Aproveite 3 meses de conteúdo incrível!"
+                    android:layout_marginBottom="16dp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Escolha o modelo"
+                    android:textColor="@color/cinza_texto"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="8dp" />
+
+                <HorizontalScrollView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:scrollbars="none"
+                    android:layout_marginBottom="16dp">
+
+                    <LinearLayout
+                        android:id="@+id/galeriaModelosPreco"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal" />
+                </HorizontalScrollView>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Cor do banner"
+                    android:textColor="@color/cinza_texto"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="8dp" />
+
+                <LinearLayout
+                    android:id="@+id/linhaCores"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="20dp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Formato"
+                    android:textColor="@color/cinza_texto"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="8dp" />
+                <LinearLayout
+                    android:id="@+id/linhaFormatos"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="20dp" />
 
                 <TextView
                     android:id="@+id/btnGerarBannerPrecos"
@@ -110,10 +318,10 @@
                     android:layout_height="wrap_content"
                     android:background="@drawable/bg_botao_primario"
                     android:gravity="center"
-                    android:padding="14dp"
-                    android:text="Gerar Banner de Preços"
+                    android:padding="16dp"
+                    android:text="Gerar banner"
                     android:textColor="@color/branco"
-                    android:textSize="14sp"
+                    android:textSize="15sp"
                     android:textStyle="bold" />
             </LinearLayout>
 
@@ -328,15 +536,43 @@
                 tools:visibility="visible" />
 
             <TextView
+                android:id="@+id/tvLabelModeloFilme"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Escolha o modelo"
+                android:textColor="@color/cinza_texto"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="8dp"
+                android:visibility="gone"
+                tools:visibility="visible" />
+
+            <HorizontalScrollView
+                android:id="@+id/scrollModelosFilme"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:scrollbars="none"
+                android:layout_marginBottom="16dp"
+                android:visibility="gone"
+                tools:visibility="visible">
+
+                <LinearLayout
+                    android:id="@+id/galeriaModelosFilme"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal" />
+            </HorizontalScrollView>
+
+            <TextView
                 android:id="@+id/btnGerarBanner"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:background="@drawable/bg_botao_secundario"
+                android:background="@drawable/bg_botao_primario"
                 android:gravity="center"
-                android:padding="14dp"
+                android:padding="16dp"
                 android:text="Gerar Banner"
                 android:textColor="@color/branco"
-                android:textSize="14sp"
+                android:textSize="15sp"
                 android:textStyle="bold"
                 android:visibility="gone"
                 android:layout_marginBottom="20dp"
