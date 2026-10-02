@@ -17,30 +17,26 @@ object DnsConfig {
     private const val KEY_JSON = "servers_json"
     private const val INTERVALO_MIN_MS = 60_000L
 
-    // Lista de emergência, só usada se a 1ª abertura do app não tiver
-    // internet ainda ou a VPS estiver fora do ar nesse instante.
+    // Lista de emergência (igual à que está hoje na VPS), só usada se a 1ª
+    // abertura do app não tiver internet ainda ou a VPS estiver fora do ar.
     private val FALLBACK = listOf(
-        "http://fibercdn.sbs",
-        "http://ranos.sbs",
-        "http://cmdtv.casa",
-        "http://cmdtv.pro",
-        "http://cmdtv.sbs",
-        "http://cmdtv.top",
-        "http://cmdbr.life",
-        "http://supertv.red",
-        "http://kodexk.click",
-        "http://maisplaytech.space",
-        "http://pthdtv.sbs",
-        "http://pthdtv.top",
         "http://cdnsec.cyou",
         "http://fx12.sbs",
         "http://anotaai.lol",
-        "http://brtx.beauty",
-        "http://fuiali.vip",
-        "http://dogshow.club",
-        "http://cdnsec.click",
+        "http://maisplaytech.space",
+        "http://pthdtv.top",
+        "http://cybertrongold.sbs",
+        "http://zenvia21.org",
+        "http://suprema21.click",
+        "http://cybertronplay.space",
+        "http://cybernexus.remotewire.net",
         "http://sivimcdn.click",
-        "http://cybertronplay.space"
+        "http://supertv.red",
+        "http://lekadem.click",
+        "http://luludvjo.click",
+        "https://ranos.sbs",
+        "http://cmdtv.casa",
+        "http://cmdbr.life"
     )
 
     private val client: OkHttpClient by lazy {
@@ -57,7 +53,12 @@ object DnsConfig {
 
     private fun parse(raw: String): List<String>? {
         return try {
-            val arr = JSONObject(raw).optJSONArray("servers") ?: return null
+            // ✅ CORREÇÃO: o dns_config.json da VPS agora é {"versao": 2,
+            // "dns": [...], "servidores": [...]}. Antes o app só lia a chave
+            // "servers", ignorava o arquivo novo e ficava preso numa lista
+            // antiga. Agora aceita "dns" (formato novo) e "servers" (antigo).
+            val obj = JSONObject(raw)
+            val arr = obj.optJSONArray("dns") ?: obj.optJSONArray("servers") ?: return null
             val lista = mutableListOf<String>()
             for (i in 0 until arr.length()) {
                 val s = arr.optString(i, "").trim()
