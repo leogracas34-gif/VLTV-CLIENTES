@@ -12,6 +12,7 @@ import androidx.work.WorkRequest
 import androidx.work.WorkerParameters
 import com.vltv.clientes.data.AppDatabase
 import com.vltv.clientes.network.BuscaClienteResultado
+import com.vltv.clientes.network.GatewayApi
 import com.vltv.clientes.network.XtreamCheck
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -36,6 +37,21 @@ class SincronizacaoClienteWorker(
         val db = AppDatabase.getDatabase(applicationContext)
         val dao = db.clienteDao()
         val cliente = dao.buscarPorId(clienteId) ?: return@withContext Result.success()
+
+        // Primeiro libera o login no gateway (sem isso o servidor responderia "inválido" e o
+        // cliente seria marcado como vencido por engano). Sem rede ou com o backend fora do ar,
+        // o WorkManager tenta de novo sozinho.
+        if (!GatewayApi.liberar(applicationContext, cliente)) {
+            if (!GatewayApi.configurado(applicationContext)) {
+                dao.atualizar(
+                    cliente.copy(
+                        ultimoErro = "Configure o Servidor de Envio (Configurações) para liberar este login no VLTV Play"
+                    )
+                )
+                return@withContext Result.success()
+            }
+            return@withContext Result.retry()
+        }
 
         try {
             val resultado = if (cliente.dns.isBlank()) {

@@ -9,6 +9,7 @@ import com.vltv.clientes.network.AppConfig
 import com.vltv.clientes.network.BackendApi
 import com.vltv.clientes.network.BuscaClienteResultado
 import com.vltv.clientes.network.EnvioResultado
+import com.vltv.clientes.network.GatewayApi
 import com.vltv.clientes.network.XtreamCheck
 import com.vltv.clientes.notifications.NotificationHelper
 import kotlinx.coroutines.Dispatchers
@@ -57,9 +58,18 @@ class VerificacaoVencimentoWorker(
         // ficava lenta. Agora todos disparam ao mesmo tempo; o OkHttp já
         // enfileira as chamadas de rede sozinho (não sobrecarrega o
         // aparelho nem o servidor).
+        // Antes de consultar, deixa o gateway igual à lista de clientes ativos do app (libera os
+        // novos, tira quem foi excluído ou desativado). Se não conseguir agora, só os clientes
+        // ainda "pendentes" esperam a próxima rodada (assim não são marcados como vencidos
+        // por engano); os que já estavam liberados continuam sendo consultados normalmente.
+        val gatewayOk = GatewayApi.espelho(applicationContext, clientes)
+
         coroutineScope {
             clientes.map { cliente ->
-                async { processarCliente(cliente, dao, forcarEnvio) }
+                async {
+                    if (!gatewayOk && cliente.dns.isBlank()) return@async
+                    processarCliente(cliente, dao, forcarEnvio)
+                }
             }.awaitAll()
         }
 
