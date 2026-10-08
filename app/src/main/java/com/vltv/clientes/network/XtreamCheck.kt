@@ -21,6 +21,7 @@ sealed class BuscaClienteResultado {
     data class Erro(val mensagem: String) : BuscaClienteResultado()
 }
 
+// (Agora a lista de servidores é só o gateway da VPS - ver DnsConfig.)
 // Mesma lógica de "testar todos os DNS em paralelo, o que responder OK
 // primeiro ganha" do LoginActivity.kt do VLTV+, mas guardando o MOTIVO de
 // cada servidor que falhar — pra saber de verdade se é credencial errada,
@@ -228,6 +229,16 @@ object XtreamCheck {
             if (resultado != null) {
                 BuscaClienteResultado.Sucesso(resultado)
             } else {
+                // Só é "não encontrado" de verdade quando o gateway respondeu e disse que o login
+                // não existe. Se ele nem respondeu (VPS fora do ar, sem rede, bloqueio
+                // temporário), lança erro: quem chamou trata como "tenta depois" e NÃO marca
+                // o cliente como vencido.
+                val definitivo = diagnosticos.values.any {
+                    it.startsWith("usuário/senha") || it.startsWith("não é um painel")
+                }
+                if (!definitivo) {
+                    throw java.io.IOException("Servidor indisponível agora: " + resumirDiagnosticos(diagnosticos))
+                }
                 BuscaClienteResultado.Erro(resumirDiagnosticos(diagnosticos))
             }
         }
@@ -237,11 +248,8 @@ object XtreamCheck {
     // ser mais rápido nas checagens diárias de rotina).
     suspend fun reconsultar(context: Context, dnsConhecido: String, usuario: String, senha: String): BuscaClienteResultado =
         withContext(Dispatchers.IO) {
-            val (direto, _) = testarServidor(dnsConhecido, usuario, senha, clientRapido)
-            if (direto != null) return@withContext BuscaClienteResultado.Sucesso(direto)
-
-            // DNS antigo não respondeu mais (pode ter saído do ar) — busca
-            // de novo em toda a lista, igual ao cadastro inicial.
+            // O DNS guardado de antes (se houver) é ignorado de propósito: o app nunca fala
+            // direto com um DNS de origem, só com o gateway.
             buscarCliente(context, usuario, senha)
         }
 }
