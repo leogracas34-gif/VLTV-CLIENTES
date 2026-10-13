@@ -9,6 +9,9 @@ interface ClienteDao {
     @Query("SELECT * FROM clientes ORDER BY diasRestantes ASC")
     fun observarTodos(): LiveData<List<ClienteEntity>>
 
+    @Query("SELECT * FROM clientes")
+    suspend fun listarTodosParaExportar(): List<ClienteEntity>
+
     @Query("SELECT * FROM clientes WHERE ativo = 1")
     suspend fun listarAtivos(): List<ClienteEntity>
 
