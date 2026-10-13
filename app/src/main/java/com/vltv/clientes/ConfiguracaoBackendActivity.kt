@@ -7,6 +7,7 @@ import com.vltv.clientes.databinding.ActivityConfiguracaoBackendBinding
 import com.vltv.clientes.network.AppConfig
 import com.vltv.clientes.network.BackendApi
 import com.vltv.clientes.network.EnvioResultado
+import com.vltv.clientes.network.PainelApi
 import kotlinx.coroutines.launch
 
 class ConfiguracaoBackendActivity : AppCompatActivity() {
@@ -24,6 +25,7 @@ class ConfiguracaoBackendActivity : AppCompatActivity() {
         binding.etApiKey.setText(AppConfig.getApiKey(this))
 
         binding.btnTestar.setOnClickListener { testarConexao() }
+        binding.btnEnviarPainel.setOnClickListener { enviarParaPainel() }
 
         binding.btnSalvarBackend.setOnClickListener {
             AppConfig.salvarBackend(
@@ -61,6 +63,27 @@ class ConfiguracaoBackendActivity : AppCompatActivity() {
                     binding.tvResultadoTeste.setTextColor(resources.getColor(R.color.vermelho_critico, theme))
                 }
             }
+        }
+    }
+
+    // Migração única: manda todos os clientes deste aparelho para o painel Admin.
+    private fun enviarParaPainel() {
+        val usuario = binding.etPainelUsuario.text.toString().trim()
+        val senha = binding.etPainelSenha.text.toString()
+        if (usuario.isBlank() || senha.isBlank()) {
+            binding.tvResultadoPainel.text = "Informe o usuário e a senha do painel."
+            binding.tvResultadoPainel.setTextColor(resources.getColor(R.color.vermelho_critico, theme))
+            return
+        }
+        binding.btnEnviarPainel.isEnabled = false
+        binding.tvResultadoPainel.text = "Enviando..."
+        binding.tvResultadoPainel.setTextColor(resources.getColor(R.color.cinza_texto, theme))
+        lifecycleScope.launch {
+            val resposta = PainelApi.enviarClientes(this@ConfiguracaoBackendActivity, usuario, senha)
+            binding.tvResultadoPainel.text = resposta
+            val cor = if (resposta.startsWith("✓")) R.color.verde_ok else R.color.vermelho_critico
+            binding.tvResultadoPainel.setTextColor(resources.getColor(cor, theme))
+            binding.btnEnviarPainel.isEnabled = true
         }
     }
 }
