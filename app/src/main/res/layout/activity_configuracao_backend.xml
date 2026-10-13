@@ -119,5 +119,74 @@
             android:clickable="true"
             android:focusable="true" />
 
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="@color/cinza_hint"
+            android:layout_marginTop="28dp"
+            android:layout_marginBottom="20dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Migrar para o painel Admin (admin.vltvplay.tech)"
+            android:textColor="@color/branco"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="6dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Envia todos os clientes deste aparelho para o painel (uma vez). Use o mesmo usuário e senha com que você entra no painel."
+            android:textColor="@color/cinza_texto_escuro"
+            android:textSize="12sp"
+            android:layout_marginBottom="12dp" />
+
+        <EditText
+            android:id="@+id/etPainelUsuario"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_input"
+            android:hint="Usuário do painel"
+            android:textColor="@color/branco"
+            android:textColorHint="@color/cinza_hint"
+            android:inputType="text"
+            android:padding="14dp"
+            android:layout_marginBottom="10dp" />
+
+        <EditText
+            android:id="@+id/etPainelSenha"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_input"
+            android:hint="Senha do painel"
+            android:textColor="@color/branco"
+            android:textColorHint="@color/cinza_hint"
+            android:inputType="textPassword"
+            android:padding="14dp"
+            android:layout_marginBottom="12dp" />
+
+        <TextView
+            android:id="@+id/btnEnviarPainel"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:background="@drawable/bg_botao_secundario"
+            android:gravity="center"
+            android:text="Enviar clientes para o painel"
+            android:textColor="@color/branco"
+            android:textSize="14sp"
+            android:clickable="true"
+            android:focusable="true"
+            android:layout_marginBottom="12dp" />
+
+        <TextView
+            android:id="@+id/tvResultadoPainel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="@color/cinza_texto"
+            android:textSize="12.5sp"
+            android:layout_marginBottom="16dp" />
+
     </LinearLayout>
 </ScrollView>
